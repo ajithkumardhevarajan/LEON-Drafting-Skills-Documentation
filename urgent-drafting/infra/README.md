@@ -27,14 +27,69 @@ infra/
 
 Edit `config.py` to customize the deployment:
 
-- **Service naming**: `urgent-drafting-mcp`
-- **ECR repository**: `a207920/urgent-drafting-mcp/dev`
+- **Service naming**: `urg-draft` (short name to avoid ALB 32-char limit)
+- **Service full name**: `urgent-drafting` (for display/logs)
+- **ECR repository**: Separate per environment
+  - Dev: `a207920/urgent-drafting-skill/dev`
+  - QA: `a207920/urgent-drafting-skill/qa`
+  - Staging: `a207920/urgent-drafting-skill/staging`
+  - Prod: `a207920/urgent-drafting-skill/prod`
 - **Resource prefix**: `a207920` (includes asset ID)
 - **Container port**: 8000
 - **CPU**: 512 units
 - **Memory**: 1024 MiB
 - **Auto-scaling**: 1-5 tasks (70% CPU/memory target)
 - **ALB**: Internal (not public)
+
+## Versioning Strategy
+
+This deployment uses **hybrid semantic versioning with git traceability**:
+
+### Version Format
+```
+vMAJOR.MINOR.PATCH-GITSHA[-dirty]
+```
+
+**Examples:**
+- `v0.1.0-a7f3b2c` - Clean build from git commit a7f3b2c
+- `v0.1.1-b4e2f91` - Clean build from git commit b4e2f91
+- `v0.1.2-b4e2f91-dirty` - Build from b4e2f91 with uncommitted changes
+
+### How It Works
+
+1. **VERSION File** (`infra/VERSION`): Contains `MAJOR.MINOR.x` (e.g., `0.1.x`)
+2. **Auto-increment**: Patch version auto-increments by querying ECR for existing tags
+3. **Git SHA**: Appends short commit hash for code traceability
+4. **Dirty Flag**: Adds `-dirty` suffix when deploying with uncommitted changes
+
+### Benefits
+
+- ✅ **Human-readable**: Semantic versioning shows deployment progression
+- ✅ **Traceable**: Git SHA pinpoints exact code deployed
+- ✅ **Immutable**: Each deployment gets a unique tag
+- ✅ **Rollback-friendly**: Deploy any previous version by tag
+- ✅ **Environment-independent**: Separate ECR repos per environment prevent version conflicts
+
+### Version Control
+
+```bash
+# Check current version and next version
+./deploy.sh status
+
+# Output shows:
+# VERSION file: 0.1.x
+# Next version: v0.1.5-a7f3b2c
+# Latest: v0.1.4-xyz1234
+```
+
+To bump major or minor version:
+```bash
+# Edit infra/VERSION file
+echo "0.2.x" > infra/VERSION
+
+# Next deployment will be v0.2.0-<sha>
+./deploy.sh deploy dev
+```
 
 ## Deployment Commands
 
@@ -49,7 +104,7 @@ cd infra
 # Only run this ONCE, not per skill
 ./deploy.sh cdk-bootstrap
 
-# Create ECR repository (one-time per skill)
+# Create ECR repository (one-time per environment)
 ./deploy.sh create-ecr
 ```
 
@@ -62,34 +117,49 @@ cd infra
 ### Full Deployment
 
 ```bash
-# Deploy with 'latest' tag (default)
-./deploy.sh deploy
+# Deploy to dev with auto-versioned tag (e.g., v0.1.0-a7f3b2c)
+./deploy.sh deploy dev
 
-# Deploy with specific version tag
-./deploy.sh deploy v1.0.0
+# Deploy to qa with auto-versioned tag
+./deploy.sh deploy qa
+
+# Deploy to staging with auto-versioned tag
+./deploy.sh deploy staging
+
+# Deploy specific version (rollback)
+./deploy.sh deploy dev v0.1.5-a7f3b2c
 ```
 
+**Note**: Each environment has its own ECR repository, so version numbers are independent per environment.
+
 The `deploy` command performs:
-1. Build Docker image for linux/amd64
-2. Push image to ECR
-3. Deploy infrastructure with CDK
+1. Auto-compute version from VERSION file, ECR tags, and git status
+2. Build Docker image for linux/arm64
+3. Push image to ECR with computed version tag
+4. Deploy infrastructure with CDK
 
 ### Individual Operations
 
 ```bash
-# Build Docker image only
-./deploy.sh build [tag]
+# Build Docker image only (auto-versions)
+./deploy.sh build
 
-# Push existing image to ECR
-./deploy.sh push [tag]
+# Build with specific tag
+./deploy.sh build v0.1.5-a7f3b2c
+
+# Push existing image to ECR (auto-versions)
+./deploy.sh push
+
+# Push with specific tag
+./deploy.sh push v0.1.5-a7f3b2c
 
 # Deploy CDK stack only (assumes image exists)
-./deploy.sh cdk-deploy [tag]
+./deploy.sh cdk-deploy dev v0.1.5-a7f3b2c
 
 # Preview infrastructure changes
-./deploy.sh cdk-diff [tag]
+./deploy.sh cdk-diff dev
 
-# Check deployment status
+# Check deployment status and version info
 ./deploy.sh status
 
 # Destroy stack (prompts for confirmation)
@@ -125,9 +195,9 @@ The stack creates the following AWS resources:
 
 ### Configuration
 - **SSM Parameters**:
-  - `/a207920/urgent-drafting-mcp/alb-dns` - ALB DNS name
-  - `/a207920/urgent-drafting-mcp/service-url` - Service HTTP URL
-  - `/a207920/urgent-drafting-mcp/service-arn` - ECS Service ARN
+  - `/a207920/urg-draft/alb-dns` - ALB DNS name
+  - `/a207920/urg-draft/service-url` - Service HTTP URL
+  - `/a207920/urg-draft/service-arn` - ECS Service ARN
 
 ### Auto-Scaling
 - **CPU-based**: Target 70% utilization
@@ -149,17 +219,24 @@ LOG_LEVEL=info
 
 ## Naming Convention
 
-All resources include the `a207920` asset ID prefix:
+All resources include the `a207920` asset ID prefix. Note the use of short name (`urg-draft`) for ALB due to 32-character limit, and full name (`urgent-drafting`) for other resources.
 
 | Resource Type | Pattern | Example |
 |--------------|---------|---------|
-| ECR | `a207920/{service}/dev` | `a207920/urgent-drafting-mcp/dev` |
-| ECS Cluster | `a207920-{service}-cluster` | `a207920-urgent-drafting-cluster` |
-| ECS Service | `a207920-{service}-service` | `a207920-urgent-drafting-service` |
-| ALB | `a207920-{service}-alb` | `a207920-urgent-drafting-alb` |
-| IAM Roles | `a207920-{service}-{type}-role` | `a207920-urgent-drafting-task-role` |
-| SSM Params | `/a207920/{service}/{param}` | `/a207920/urgent-drafting-mcp/service-url` |
-| CloudWatch | `/aws/ecs/a207920-{service}-service` | `/aws/ecs/a207920-urgent-drafting-service` |
+| ECR | `a207920/{skill}/{env}` | `a207920/urgent-drafting-skill/dev` |
+| Image Tag | `vMAJOR.MINOR.PATCH-GITSHA[-dirty]` | `v0.1.5-a7f3b2c` |
+| Stack | `a207920-{short-name}-skill-stack` | `a207920-urg-draft-skill-stack` |
+| ECS Cluster | `a207920-spx-{env}-{full-name}-cluster` | `a207920-spx-dev-urgent-drafting-cluster` |
+| ECS Service | `a207920-spx-{env}-{full-name}-service` | `a207920-spx-dev-urgent-drafting-service` |
+| ALB | `a207920-spx-{env}-{short-name}-alb` | `a207920-spx-dev-urg-draft-alb` |
+| IAM Roles | `a207920-spx-{env}-{full-name}-{type}-role` | `a207920-spx-dev-urgent-drafting-task-role` |
+| SSM Params | `/a207920/{short-name}/{param}` | `/a207920/urg-draft/service-url` |
+| CloudWatch | `/aws/ecs/a207920-spx-{env}-{full-name}-service` | `/aws/ecs/a207920-spx-dev-urgent-drafting-service` |
+
+**Note on ECR Repositories:**
+- Each environment (dev, qa, staging, prod) has its own ECR repository
+- This allows independent versioning per environment
+- Dev/QA share preprod AWS account, staging/prod share prod AWS account
 
 ## Health Checks
 
@@ -186,9 +263,15 @@ Check deployment status and service information:
 ```
 
 This shows:
-- ECR repository existence
-- Available image tags
-- CDK stack status
+- **VERSION file**: Current version series (e.g., `0.1.x`)
+- **Next version**: What the next deployment will be tagged as (e.g., `v0.1.5-a7f3b2c`)
+- **ECR repository**: Existence and status
+- **Available tags**:
+  - Tags in current version series
+  - Latest deployed version
+  - All available tags (for rollback reference)
+- **CDK stack status**: Current CloudFormation stack state
+- **Git status**: Whether working tree is clean or dirty
 
 ## Accessing the Service
 
@@ -197,7 +280,7 @@ After deployment, retrieve the service URL:
 ```bash
 # From SSM Parameter
 aws ssm get-parameter \
-  --name /a207920/urgent-drafting-mcp/service-url \
+  --name /a207920/urg-draft/service-url \
   --region eu-west-1 \
   --profile tr-central-preprod \
   --query 'Parameter.Value' \
@@ -209,9 +292,71 @@ aws ssm get-parameter \
 
 Test the health endpoint:
 ```bash
-SERVICE_URL=$(aws ssm get-parameter --name /a207920/urgent-drafting-mcp/service-url --region eu-west-1 --profile tr-central-preprod --query 'Parameter.Value' --output text)
+SERVICE_URL=$(aws ssm get-parameter --name /a207920/urg-draft/service-url --region eu-west-1 --profile tr-central-preprod --query 'Parameter.Value' --output text)
 curl $SERVICE_URL/health
 ```
+
+## Rollback and Version Management
+
+### Rolling Back to Previous Version
+
+```bash
+# Check available versions
+./deploy.sh status
+
+# Deploy specific previous version
+./deploy.sh deploy dev v0.1.3-abc1234
+```
+
+### Checking What's Deployed
+
+```bash
+# Get current deployment version from ECS
+aws ecs describe-services \
+  --cluster a207920-spx-dev-urgent-drafting-cluster \
+  --services a207920-spx-dev-urgent-drafting-service \
+  --region eu-west-1 \
+  --profile tr-central-preprod \
+  --query 'services[0].taskDefinition'
+
+# Extract image tag from task definition
+aws ecs describe-task-definition \
+  --task-definition <TASK_DEF_ARN> \
+  --region eu-west-1 \
+  --profile tr-central-preprod \
+  --query 'taskDefinition.containerDefinitions[0].image'
+```
+
+### Inspecting Code from Version
+
+```bash
+# Given version v0.1.5-a7f3b2c, inspect the code
+git show a7f3b2c
+
+# See what changed in that commit
+git show a7f3b2c --stat
+
+# Compare two deployed versions
+git diff abc1234..def5678
+```
+
+### Bumping Major/Minor Version
+
+When you want to start a new version series:
+
+```bash
+# Edit VERSION file
+cd infra
+echo "0.2.x" > VERSION
+
+# Next deployment starts new series
+./deploy.sh deploy dev  # Creates v0.2.0-<sha>
+```
+
+Use cases for version bumps:
+- **Patch (auto)**: Bug fixes, small changes, normal deployments
+- **Minor (manual)**: New features, API additions, backward-compatible changes
+- **Major (manual)**: Breaking changes, major refactors, API redesigns
 
 ## Adding a New Skill
 

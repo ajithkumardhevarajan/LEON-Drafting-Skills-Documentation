@@ -4,8 +4,53 @@ Configuration for urgent-drafting MCP deployment to AWS ECS.
 
 import os
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Any
+
+
+# Environment-specific configuration
+ENVIRONMENT_CONFIGS = {
+    "dev": {
+        "cpu": 512,
+        "memory_mib": 1024,
+        "desired_count": 1,
+        "min_capacity": 1,
+        "max_capacity": 3,
+        "cpu_target_utilization": 70,
+        "memory_target_utilization": 70,
+        "public_load_balancer": False,
+    },
+    "qa": {
+        "cpu": 1024,
+        "memory_mib": 2048,
+        "desired_count": 2,
+        "min_capacity": 2,
+        "max_capacity": 5,
+        "cpu_target_utilization": 70,
+        "memory_target_utilization": 70,
+        "public_load_balancer": False,
+    },
+    "staging": {
+        "cpu": 1024,
+        "memory_mib": 2048,
+        "desired_count": 2,
+        "min_capacity": 2,
+        "max_capacity": 8,
+        "cpu_target_utilization": 70,
+        "memory_target_utilization": 70,
+        "public_load_balancer": False,
+    },
+    "prod": {
+        "cpu": 2048,
+        "memory_mib": 4096,
+        "desired_count": 3,
+        "min_capacity": 3,
+        "max_capacity": 10,
+        "cpu_target_utilization": 70,
+        "memory_target_utilization": 70,
+        "public_load_balancer": False,
+    },
+}
 
 
 @dataclass
@@ -27,24 +72,24 @@ class MCPConfig:
     asset_id: str = "207920"
     resource_prefix: str = "a207920"
 
-    # ECR Configuration - using full skill name
-    ecr_repository_name: str = "a207920/urgent-drafting-skill/dev"
-    default_image_tag: str = "latest"
+    # ECR Configuration - dynamically set based on environment
+    ecr_repository_name: str = field(init=False)
+    default_image_tag: str = ""  # Force explicit version (auto-computed from VERSION file)
 
-    # ECS Configuration
-    cpu: int = 512
-    memory_mib: int = 1024
-    desired_count: int = 1
+    # ECS Configuration - dynamically set based on environment
+    cpu: int = field(init=False)
+    memory_mib: int = field(init=False)
+    desired_count: int = field(init=False)
     container_port: int = 8000  # Port from Dockerfile EXPOSE
 
-    # Auto Scaling Configuration
-    min_capacity: int = 1
-    max_capacity: int = 5
-    cpu_target_utilization: int = 70
-    memory_target_utilization: int = 70
+    # Auto Scaling Configuration - dynamically set based on environment
+    min_capacity: int = field(init=False)
+    max_capacity: int = field(init=False)
+    cpu_target_utilization: int = field(init=False)
+    memory_target_utilization: int = field(init=False)
 
-    # Load Balancer Configuration
-    public_load_balancer: bool = False  # Internal ALB
+    # Load Balancer Configuration - dynamically set based on environment
+    public_load_balancer: bool = field(init=False)
 
     # SSM Parameters - using short name
     ssm_parameter_prefix: str = "/a207920/urg-draft"
@@ -52,6 +97,29 @@ class MCPConfig:
     # Tags
     project_name: str = "sphinx"
     service_full_name: str = "sphinx-urgent-drafting-skill"
+
+    def __post_init__(self):
+        """Initialize environment-specific configuration after dataclass initialization"""
+        # Validate environment
+        if self.environment not in ENVIRONMENT_CONFIGS:
+            raise ValueError(
+                f"Invalid environment: {self.environment}. "
+                f"Must be one of: {', '.join(ENVIRONMENT_CONFIGS.keys())}"
+            )
+
+        # Load environment-specific configuration
+        env_config = ENVIRONMENT_CONFIGS[self.environment]
+        self.cpu = env_config["cpu"]
+        self.memory_mib = env_config["memory_mib"]
+        self.desired_count = env_config["desired_count"]
+        self.min_capacity = env_config["min_capacity"]
+        self.max_capacity = env_config["max_capacity"]
+        self.cpu_target_utilization = env_config["cpu_target_utilization"]
+        self.memory_target_utilization = env_config["memory_target_utilization"]
+        self.public_load_balancer = env_config["public_load_balancer"]
+
+        # Set ECR repository name with environment suffix
+        self.ecr_repository_name = f"{self.resource_prefix}/{self.mcp_name}/{self.environment}"
 
     def get_stack_name(self) -> str:
         """Get the CDK stack name"""
@@ -137,6 +205,7 @@ class MCPConfig:
         }
 
 
-# Default configuration instance (for backward compatibility)
-# In production, create with specific environment: MCPConfig(environment="dev")
-CONFIG = MCPConfig(environment="dev")
+# Default configuration instance
+# Reads environment from DEPLOYMENT_ENV environment variable (set by deploy.sh)
+# Falls back to "dev" if not set
+CONFIG = MCPConfig(environment=os.environ.get("DEPLOYMENT_ENV", "dev"))
