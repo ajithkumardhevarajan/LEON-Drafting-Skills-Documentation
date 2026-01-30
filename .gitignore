@@ -1,0 +1,78 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+ENV/
+env/
+.venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Environment variables
+.env
+
+# VS Code settings
+.vscode/
+
+# macOS system files
+.DS_Store
+
+# Test coverage reports
+htmlcov/
+.coverage
+.coverage.*
+
+# Pytest cache
+.pytest_cache/
+
+# MyPy cache
+.mypy_cache/
+
+# Logs
+*.log
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Unit test / coverage reports
+.tox/
+.nox/
+
+# Profiling data
+*.prof
+
+# Node.js dependencies
+node_modules/
+*/node_modules/*
+package-lock.json
+
+# Yalc local package linking
+.yalc/
+yalc.lock
+
+# Additional logs directory
+logs/
+
+# Backup files
+*.backup
+*.bak
+*.tmp
+
+# Patch files
+*.patch
+
+# OneDrive files
+.ondriveignore
+
+# Claude AI assistant
+.claude/
+.onedriveignore
+.vite/
+**/cdk.out
