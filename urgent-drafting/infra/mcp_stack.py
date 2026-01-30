@@ -52,6 +52,9 @@ class MCPStack(Stack):
         # Create task definition and container
         self.task_definition = self._create_task_definition()
 
+        # Create load balancer explicitly for readable naming
+        self.load_balancer = self._create_load_balancer()
+
         # Create load-balanced Fargate service
         self.fargate_service = self._create_load_balanced_service()
 
@@ -163,6 +166,17 @@ class MCPStack(Stack):
 
         return task_def
 
+    def _create_load_balancer(self) -> elbv2.ApplicationLoadBalancer:
+        """Create application load balancer with readable name"""
+        alb = elbv2.ApplicationLoadBalancer(
+            self,
+            "LoadBalancer",
+            load_balancer_name=self.config.get_resource_name("alb"),
+            vpc=StackContextAccessor.tr_context(self).vpc,
+            internet_facing=self.config.public_load_balancer,
+        )
+        return alb
+
     def _create_load_balanced_service(self) -> ecs_patterns.ApplicationLoadBalancedFargateService:
         """Create application load-balanced Fargate service"""
         fargate_service = ecs_patterns.ApplicationLoadBalancedFargateService(
@@ -175,6 +189,7 @@ class MCPStack(Stack):
             cpu=self.config.cpu,
             min_healthy_percent=100,
             task_definition=self.task_definition,
+            load_balancer=self.load_balancer,  # Use explicit ALB with readable name
             public_load_balancer=self.config.public_load_balancer,
             health_check_grace_period=Duration.seconds(120),  # Give container time to start
         )
