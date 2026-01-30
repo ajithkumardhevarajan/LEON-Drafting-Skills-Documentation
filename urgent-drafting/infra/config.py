@@ -91,8 +91,8 @@ class MCPConfig:
     # Load Balancer Configuration - dynamically set based on environment
     public_load_balancer: bool = field(init=False)
 
-    # SSM Parameters - using short name
-    ssm_parameter_prefix: str = "/a207920/urg-draft"
+    # SSM Parameters - dynamically set based on environment
+    ssm_parameter_prefix: str = field(init=False)
 
     # Tags
     project_name: str = "sphinx"
@@ -120,6 +120,9 @@ class MCPConfig:
 
         # Set ECR repository name with environment suffix
         self.ecr_repository_name = f"{self.resource_prefix}/{self.mcp_name}/{self.environment}"
+
+        # Set SSM parameter prefix with environment
+        self.ssm_parameter_prefix = f"/a207920/urg-draft/{self.environment}"
 
     def get_stack_name(self) -> str:
         """Get the CDK stack name"""
