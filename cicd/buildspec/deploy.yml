@@ -1,0 +1,52 @@
+version: 0.2
+
+# Deploy phase: CDK deployment to ECS
+# Leverages existing deploy.sh cdk-deploy command which handles everything
+
+phases:
+  install:
+    commands:
+      # Install uv for fast Python package management
+      - echo "Installing uv..."
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$HOME/.cargo/bin:$PATH"
+      - uv --version
+
+  pre_build:
+    commands:
+      - echo "Starting deploy phase for $SKILL_PATH in $ENVIRONMENT environment"
+      - export IMAGE_TAG=$(cat $CODEBUILD_SRC_DIR_BuildOutput/imagetag.txt)
+      - echo "Image tag to deploy: $IMAGE_TAG"
+      - export PATH="$HOME/.cargo/bin:$PATH"  # Ensure uv is in PATH
+
+  build:
+    commands:
+      - echo "Deploying with CDK using deploy.sh..."
+      - export PATH="$HOME/.cargo/bin:$PATH"  # Ensure uv is in PATH
+      - cd $SKILL_PATH/infra
+      - chmod +x deploy.sh
+
+      # Export environment variables for CDK
+      - export DEPLOYMENT_ENV=$ENVIRONMENT
+      # IMAGE_TAG is now set in the pre_build phase
+
+      # deploy.sh cdk-deploy handles:
+      # - Creating Python venv
+      # - Installing dependencies with uv (if available) or pip
+      # - Running cdk deploy
+      - echo "Running deploy.sh cdk-deploy..."
+      - ./deploy.sh cdk-deploy $ENVIRONMENT $IMAGE_TAG
+
+  post_build:
+    commands:
+      - echo "Deployment completed successfully"
+      - echo "Skill $SKILL_PATH deployed to $ENVIRONMENT environment"
+      - export PATH="$HOME/.cargo/bin:$PATH"  # Ensure uv is in PATH
+
+      # Show deployment status
+      - ./deploy.sh status $ENVIRONMENT
+
+artifacts:
+  files:
+    - '**/*'
+  name: DeployOutput

@@ -1,0 +1,56 @@
+version: 0.2
+
+# Build phase: Docker build and ECR push
+# Leverages existing deploy.sh script which handles everything
+
+phases:
+  install:
+    commands:
+      # Install uv for fast Python package management
+      - echo "Installing uv..."
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - export PATH="$HOME/.cargo/bin:$PATH"
+      - uv --version
+
+  pre_build:
+    commands:
+      - echo "Starting build phase for $SKILL_PATH in $ENVIRONMENT environment"
+      - export PATH="$HOME/.cargo/bin:$PATH"  # Ensure uv is in PATH
+
+  build:
+    commands:
+      - echo "Building and pushing Docker image using deploy.sh..."
+      - export PATH="$HOME/.cargo/bin:$PATH"  # Ensure uv is in PATH
+      - cd $SKILL_PATH/infra
+      - chmod +x deploy.sh
+
+      # deploy.sh build handles Docker build with auto-versioning
+      - ./deploy.sh build $ENVIRONMENT
+
+      # Extract the computed image tag
+      - |
+        if [ -f "VERSION" ]; then
+          IMAGE_TAG=$(bash -c "source deploy.sh && get_next_version" || echo "latest")
+          echo "Computed IMAGE_TAG=$IMAGE_TAG"
+        else
+          IMAGE_TAG="latest"
+          echo "Using default IMAGE_TAG=$IMAGE_TAG"
+        fi
+
+      # deploy.sh push handles ECR login and push
+      - ./deploy.sh push $ENVIRONMENT $IMAGE_TAG
+
+  post_build:
+    commands:
+      - echo "Build completed successfully"
+      - echo "IMAGE_TAG=$IMAGE_TAG"
+      - export PATH="$HOME/.cargo/bin:$PATH"  # Ensure uv is in PATH
+      # Export image tag for deploy stage
+      - cd $CODEBUILD_SRC_DIR
+      - echo $IMAGE_TAG > imagetag.txt
+
+artifacts:
+  files:
+    - imagetag.txt
+    - '**/*'
+  name: BuildOutput
