@@ -6,7 +6,7 @@ version: 0.2
 env:
   shell: bash
   variables:
-    UV_HOME: "$HOME/.cargo/bin"
+    UV_HOME: "$HOME/.local/bin"
 
 phases:
   install:
@@ -14,8 +14,7 @@ phases:
       # Install uv for fast Python package management
       - echo "Installing uv..."
       - curl -LsSf https://astral.sh/uv/install.sh | sh
-      - source $HOME/.cargo/env
-      - export PATH="$HOME/.cargo/bin:$PATH"
+      - source $HOME/.local/bin/env
       - uv --version
 
   pre_build:
@@ -23,12 +22,12 @@ phases:
       - echo "Starting deploy phase for $SKILL_PATH in $ENVIRONMENT environment"
       - export IMAGE_TAG=$(cat $CODEBUILD_SRC_DIR_BuildOutput/imagetag.txt)
       - echo "Image tag to deploy: $IMAGE_TAG"
-      - source $HOME/.cargo/env || export PATH="$HOME/.cargo/bin:$PATH"
+      - source $HOME/.local/bin/env || export PATH="$HOME/.local/bin:$PATH"
 
   build:
     commands:
       - echo "Deploying with CDK using deploy.sh..."
-      - source $HOME/.cargo/env || export PATH="$HOME/.cargo/bin:$PATH"
+      - source $HOME/.local/bin/env || export PATH="$HOME/.local/bin:$PATH"
       - cd $SKILL_PATH/infra
       - chmod +x deploy.sh
 
@@ -47,7 +46,7 @@ phases:
     commands:
       - echo "Deployment completed successfully"
       - echo "Skill $SKILL_PATH deployed to $ENVIRONMENT environment"
-      - source $HOME/.cargo/env || export PATH="$HOME/.cargo/bin:$PATH"
+      - source $HOME/.local/bin/env || export PATH="$HOME/.local/bin:$PATH"
 
       # Show deployment status
       - ./deploy.sh status $ENVIRONMENT
