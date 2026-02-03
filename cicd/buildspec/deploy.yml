@@ -17,6 +17,19 @@ phases:
       - source $HOME/.local/bin/env
       - uv --version
 
+      # Configure pip to use TR JFrog Artifactory for internal packages (tr-cdk-lib)
+      - echo "Configuring pip for TR JFrog..."
+      - mkdir -p ~/.pip
+      - |
+        JFROG_USERNAME=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/username" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
+        JFROG_TOKEN=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/token" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
+        cat > ~/.pip/pip.conf << EOF
+        [global]
+        extra-index-url = https://${JFROG_USERNAME}:${JFROG_TOKEN}@tr1.jfrog.io/tr1/api/pypi/pypi-local/simple
+        trusted-host = tr1.jfrog.io
+        EOF
+      - echo "Pip configured for TR JFrog"
+
   pre_build:
     commands:
       - echo "Starting deploy phase for $SKILL_PATH in $ENVIRONMENT environment"
@@ -40,14 +53,22 @@ phases:
       - chmod +x deploy.sh
 
       # Export environment variables for CDK
+      # Re-read IMAGE_TAG from artifact to ensure it's available in this phase
+      - |
+        if [ -f "$CODEBUILD_SRC_DIR_BuildOutput/imagetag.txt" ]; then
+          export IMAGE_TAG=$(cat "$CODEBUILD_SRC_DIR_BuildOutput/imagetag.txt")
+          echo "IMAGE_TAG exported for deployment - $IMAGE_TAG"
+        else
+          echo "ERROR - imagetag.txt not found in build phase!"
+          exit 1
+        fi
       - export DEPLOYMENT_ENV=$ENVIRONMENT
-      # IMAGE_TAG is now set in the pre_build phase
 
       # deploy.sh cdk-deploy handles:
       # - Creating Python venv
       # - Installing dependencies with uv (if available) or pip
       # - Running cdk deploy
-      # IMAGE_TAG is read from environment variable (set in pre_build)
+      # IMAGE_TAG is read from environment variable
       - echo "Running deploy.sh cdk-deploy..."
       - ./deploy.sh cdk-deploy $ENVIRONMENT
 
