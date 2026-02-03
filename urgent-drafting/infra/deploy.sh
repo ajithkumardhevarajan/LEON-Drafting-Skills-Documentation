@@ -72,8 +72,14 @@ echo -e "  Memory: ${BLUE}${MEMORY} MiB${NC}"
 echo -e "  Desired Count: ${BLUE}${DESIRED_COUNT}${NC}"
 echo -e "  Auto Scaling: ${BLUE}${MIN_CAPACITY}-${MAX_CAPACITY} tasks${NC}"
 
-# Set AWS profile for all AWS CLI commands
-export AWS_PROFILE="$AWS_PROFILE"
+# Set AWS profile for all AWS CLI commands (only if not in CodeBuild)
+# CodeBuild uses IAM role credentials automatically
+if [[ -z "$CODEBUILD_BUILD_ID" ]]; then
+    export AWS_PROFILE="$AWS_PROFILE"
+    echo -e "\n${BLUE}Using AWS Profile: $AWS_PROFILE${NC}"
+else
+    echo -e "\n${BLUE}Running in CodeBuild - using IAM role credentials${NC}"
+fi
 
 # Function to get next version from VERSION file, ECR, and git
 get_next_version() {

@@ -32,15 +32,11 @@ phases:
       # deploy.sh build handles Docker build with auto-versioning
       - ./deploy.sh build $ENVIRONMENT
 
-      # Extract the computed image tag
+      # Extract the computed image tag by calling deploy.sh version command
       - |
-        if [ -f "VERSION" ]; then
-          IMAGE_TAG=$(bash -c "source deploy.sh && get_next_version" || echo "latest")
-          echo "Computed IMAGE_TAG=$IMAGE_TAG"
-        else
-          IMAGE_TAG="latest"
-          echo "Using default IMAGE_TAG=$IMAGE_TAG"
-        fi
+        cd $SKILL_PATH/infra
+        IMAGE_TAG=$(DEPLOYMENT_ENV=$ENVIRONMENT bash -c 'source deploy.sh && get_next_version' || echo "latest")
+        echo "Computed IMAGE_TAG=$IMAGE_TAG"
 
       # deploy.sh push handles ECR login and push
       - ./deploy.sh push $ENVIRONMENT $IMAGE_TAG
