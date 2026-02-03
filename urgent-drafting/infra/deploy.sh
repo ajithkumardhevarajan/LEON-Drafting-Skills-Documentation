@@ -16,18 +16,50 @@ NC='\e[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MCP_ROOT="$(dirname "$SCRIPT_DIR")"
 
-echo -e "${BLUE}=== MCP Server Deployment Script ===${NC}"
-echo -e "Script directory: ${BLUE}$SCRIPT_DIR${NC}"
-echo -e "MCP root directory: ${BLUE}$MCP_ROOT${NC}"
-
-# Parse command line arguments FIRST (before loading config)
+# Parse command line arguments FIRST (before ANY output or config loading)
 # Usage: ./deploy.sh [COMMAND] [ENVIRONMENT] [IMAGE_TAG]
 COMMAND=${1:-"deploy"}
 ENVIRONMENT=${2:-"dev"}
 IMAGE_TAG=${3:-""}
 
+# Handle version command immediately (no output, just version number)
+if [[ "$COMMAND" == "version" ]]; then
+    cd "$SCRIPT_DIR"
+    VERSION_FILE="$SCRIPT_DIR/VERSION"
+    if [[ ! -f "$VERSION_FILE" ]]; then
+        echo "latest"
+        exit 0
+    fi
+
+    MAJOR_MINOR=$(cat "$VERSION_FILE" | tr -d '[:space:]' | sed 's/\.x$//')
+    if [[ ! "$MAJOR_MINOR" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        echo "latest"
+        exit 0
+    fi
+
+    MAJOR=$(echo "$MAJOR_MINOR" | cut -d. -f1)
+    MINOR=$(echo "$MAJOR_MINOR" | cut -d. -f2)
+
+    cd "$MCP_ROOT"
+    GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    DIRTY_SUFFIX=""
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        DIRTY_SUFFIX="-dirty"
+    fi
+
+    cd "$SCRIPT_DIR"
+
+    # Note: Can't query ECR without loading config, so just use git-based version
+    echo "v${MAJOR}.${MINOR}.0-${GIT_SHA}${DIRTY_SUFFIX}"
+    exit 0
+fi
+
 # Export environment for Python config and CDK
 export DEPLOYMENT_ENV="$ENVIRONMENT"
+
+echo -e "${BLUE}=== MCP Server Deployment Script ===${NC}"
+echo -e "Script directory: ${BLUE}$SCRIPT_DIR${NC}"
+echo -e "MCP root directory: ${BLUE}$MCP_ROOT${NC}"
 
 # Load configuration from Python config
 echo -e "\n${BLUE}Loading configuration...${NC}"
@@ -140,6 +172,7 @@ case "$COMMAND" in
         echo -e "  ${GREEN}cdk-destroy${NC} - Destroy the CDK stack"
         echo -e "  ${GREEN}create-ecr${NC} - Create ECR repository"
         echo -e "  ${GREEN}status${NC}     - Show deployment status"
+        echo -e "  ${GREEN}version${NC}    - Output next version number only"
         echo -e "  ${GREEN}help${NC}       - Show this help"
         echo -e "\n${BLUE}Environments:${NC}"
         echo -e "  dev (default), qa, staging, prod"
