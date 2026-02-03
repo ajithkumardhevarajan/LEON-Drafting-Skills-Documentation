@@ -40,14 +40,21 @@ if [[ "$COMMAND" == "version" ]]; then
     MAJOR=$(echo "$MAJOR_MINOR" | cut -d. -f1)
     MINOR=$(echo "$MAJOR_MINOR" | cut -d. -f2)
 
-    cd "$MCP_ROOT"
-    GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-    DIRTY_SUFFIX=""
-    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
-        DIRTY_SUFFIX="-dirty"
+    # Get git commit SHA (short form)
+    # In CodeBuild, use environment variable; otherwise use git command
+    if [[ -n "$CODEBUILD_RESOLVED_SOURCE_VERSION" ]]; then
+        # CodeBuild provides the full commit SHA
+        GIT_SHA=$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c1-7)
+        DIRTY_SUFFIX=""  # CodeBuild always builds from clean commits
+    else
+        cd "$MCP_ROOT"
+        GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        DIRTY_SUFFIX=""
+        if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+            DIRTY_SUFFIX="-dirty"
+        fi
+        cd "$SCRIPT_DIR"
     fi
-
-    cd "$SCRIPT_DIR"
 
     # Note: Can't query ECR without loading config, so just use git-based version
     echo "v${MAJOR}.${MINOR}.0-${GIT_SHA}${DIRTY_SUFFIX}"
@@ -128,16 +135,23 @@ get_next_version() {
     MINOR=$(echo "$MAJOR_MINOR" | cut -d. -f2)
 
     # Get git commit SHA (short form)
-    cd "$MCP_ROOT"
-    GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    # In CodeBuild, use environment variable; otherwise use git command
+    if [[ -n "$CODEBUILD_RESOLVED_SOURCE_VERSION" ]]; then
+        # CodeBuild provides the full commit SHA
+        GIT_SHA=$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c1-7)
+        DIRTY_SUFFIX=""  # CodeBuild always builds from clean commits
+    else
+        cd "$MCP_ROOT"
+        GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-    # Check if working tree is dirty (has uncommitted changes)
-    DIRTY_SUFFIX=""
-    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
-        DIRTY_SUFFIX="-dirty"
+        # Check if working tree is dirty (has uncommitted changes)
+        DIRTY_SUFFIX=""
+        if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+            DIRTY_SUFFIX="-dirty"
+        fi
+
+        cd "$SCRIPT_DIR"
     fi
-
-    cd "$SCRIPT_DIR"
 
     # Query ECR for existing tags
     TAGS=$(aws ecr list-images --repository-name "$ECR_REPO" \

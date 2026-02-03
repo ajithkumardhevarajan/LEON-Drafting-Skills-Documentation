@@ -20,8 +20,16 @@ phases:
   pre_build:
     commands:
       - echo "Starting deploy phase for $SKILL_PATH in $ENVIRONMENT environment"
-      - export IMAGE_TAG=$(cat $CODEBUILD_SRC_DIR_BuildOutput/imagetag.txt)
-      - echo "Image tag to deploy: $IMAGE_TAG"
+      - |
+        if [ -f "$CODEBUILD_SRC_DIR_BuildOutput/imagetag.txt" ]; then
+          IMAGE_TAG=$(cat "$CODEBUILD_SRC_DIR_BuildOutput/imagetag.txt")
+          echo "IMAGE_TAG read from BuildOutput artifact - $IMAGE_TAG"
+          export IMAGE_TAG
+        else
+          echo "ERROR - imagetag.txt not found!"
+          find $CODEBUILD_SRC_DIR* -name "imagetag.txt" 2>/dev/null || echo "Not found"
+          exit 1
+        fi
       - source $HOME/.local/bin/env || export PATH="$HOME/.local/bin:$PATH"
 
   build:
@@ -39,8 +47,9 @@ phases:
       # - Creating Python venv
       # - Installing dependencies with uv (if available) or pip
       # - Running cdk deploy
+      # IMAGE_TAG is read from environment variable (set in pre_build)
       - echo "Running deploy.sh cdk-deploy..."
-      - ./deploy.sh cdk-deploy $ENVIRONMENT $IMAGE_TAG
+      - ./deploy.sh cdk-deploy $ENVIRONMENT
 
   post_build:
     commands:
