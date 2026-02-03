@@ -3,24 +3,30 @@ version: 0.2
 # Build phase: Docker build and ECR push
 # Leverages existing deploy.sh script which handles everything
 
+env:
+  shell: bash
+  variables:
+    UV_HOME: "$HOME/.cargo/bin"
+
 phases:
   install:
     commands:
       # Install uv for fast Python package management
       - echo "Installing uv..."
       - curl -LsSf https://astral.sh/uv/install.sh | sh
+      - source $HOME/.cargo/env
       - export PATH="$HOME/.cargo/bin:$PATH"
       - uv --version
 
   pre_build:
     commands:
       - echo "Starting build phase for $SKILL_PATH in $ENVIRONMENT environment"
-      - export PATH="$HOME/.cargo/bin:$PATH"  # Ensure uv is in PATH
+      - source $HOME/.cargo/env || export PATH="$HOME/.cargo/bin:$PATH"
 
   build:
     commands:
       - echo "Building and pushing Docker image using deploy.sh..."
-      - export PATH="$HOME/.cargo/bin:$PATH"  # Ensure uv is in PATH
+      - source $HOME/.cargo/env || export PATH="$HOME/.cargo/bin:$PATH"
       - cd $SKILL_PATH/infra
       - chmod +x deploy.sh
 
@@ -44,7 +50,7 @@ phases:
     commands:
       - echo "Build completed successfully"
       - echo "IMAGE_TAG=$IMAGE_TAG"
-      - export PATH="$HOME/.cargo/bin:$PATH"  # Ensure uv is in PATH
+      - source $HOME/.cargo/env || export PATH="$HOME/.cargo/bin:$PATH"
       # Export image tag for deploy stage
       - cd $CODEBUILD_SRC_DIR
       - echo $IMAGE_TAG > imagetag.txt
