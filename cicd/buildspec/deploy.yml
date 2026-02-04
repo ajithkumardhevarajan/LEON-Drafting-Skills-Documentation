@@ -10,12 +10,20 @@ env:
 
 phases:
   install:
+    runtime-versions:
+      python: 3.11
+      nodejs: 20
     commands:
       # Install uv for fast Python package management
       - echo "Installing uv..."
       - curl -LsSf https://astral.sh/uv/install.sh | sh
       - source $HOME/.local/bin/env
       - uv --version
+
+      # Install AWS CDK CLI via npm
+      - echo "Installing AWS CDK CLI..."
+      - npm install -g aws-cdk@2.151.0
+      - cdk --version
 
       # Configure pip to use TR JFrog Artifactory for internal packages (tr-cdk-lib)
       - echo "Configuring pip for TR JFrog..."
