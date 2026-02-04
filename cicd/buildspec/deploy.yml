@@ -84,10 +84,6 @@ phases:
     commands:
       - echo "Deployment completed successfully"
       - echo "Skill $SKILL_PATH deployed to $ENVIRONMENT environment"
-      - source $HOME/.local/bin/env || export PATH="$HOME/.local/bin:$PATH"
-
-      # Show deployment status
-      - ./deploy.sh status $ENVIRONMENT
 
 artifacts:
   files:
