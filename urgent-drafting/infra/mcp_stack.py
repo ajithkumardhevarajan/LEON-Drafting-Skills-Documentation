@@ -8,6 +8,7 @@ from typing import Optional
 from aws_cdk import (
     Stack,
     Duration,
+    DefaultStackSynthesizer,
     aws_iam as iam,
     aws_ecs as ecs,
     aws_ecr as ecr,
@@ -38,6 +39,16 @@ class MCPStack(Stack):
 
     def __init__(self, scope: Construct, construct_id: str, config: MCPConfig,
                  image_tag: Optional[str] = None, **kwargs) -> None:
+
+        # Configure to use the service role for CloudFormation execution
+        # This fixes the PassRole error by using a role in service-role/ path
+        # instead of human-role/ path (which is blocked by tr-permission-boundary)
+        if 'synthesizer' not in kwargs:
+            cfn_exec_role = f"arn:aws:iam::{config.aws_account}:role/service-role/a207920-cfn-er-{config.aws_account}-{config.aws_region}"
+            kwargs['synthesizer'] = DefaultStackSynthesizer(
+                cloud_formation_execution_role=cfn_exec_role
+            )
+
         super().__init__(scope, construct_id, **kwargs)
 
         self.config = config
