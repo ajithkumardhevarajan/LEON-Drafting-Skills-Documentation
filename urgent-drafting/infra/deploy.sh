@@ -208,10 +208,21 @@ case "$COMMAND" in
 esac
 
 # Auto-compute version for build/push/deploy if not provided
+# For cdk-deploy, IMAGE_TAG should come from environment variable (set by buildspec) or command line arg
 if [[ -z "$IMAGE_TAG" && ("$COMMAND" == "deploy" || "$COMMAND" == "build" || "$COMMAND" == "push") ]]; then
     echo -e "\n${BLUE}Auto-computing next version...${NC}"
     IMAGE_TAG=$(get_next_version)
     echo -e "Computed version: ${GREEN}$IMAGE_TAG${NC}"
+elif [[ -z "$IMAGE_TAG" && "$COMMAND" == "cdk-deploy" ]]; then
+    # For cdk-deploy, try to get from DEFAULT_TAG, but warn if empty
+    IMAGE_TAG="$DEFAULT_TAG"
+    if [[ -z "$IMAGE_TAG" ]]; then
+        echo -e "${YELLOW}WARNING:${NC} IMAGE_TAG not provided and DEFAULT_TAG is empty"
+        echo -e "  For pipeline: ensure IMAGE_TAG environment variable is set in buildspec"
+        echo -e "  For local: provide image tag as third argument: ./deploy.sh cdk-deploy <env> <tag>"
+        echo -e "${RED}ERROR:${NC} Cannot proceed without IMAGE_TAG"
+        exit 1
+    fi
 elif [[ -z "$IMAGE_TAG" ]]; then
     IMAGE_TAG="$DEFAULT_TAG"
 fi

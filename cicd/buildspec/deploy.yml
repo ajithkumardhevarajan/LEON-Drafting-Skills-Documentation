@@ -76,9 +76,9 @@ phases:
       # - Creating Python venv
       # - Installing dependencies with uv (if available) or pip
       # - Running cdk deploy
-      # IMAGE_TAG is read from environment variable
-      - echo "Running deploy.sh cdk-deploy..."
-      - ./deploy.sh cdk-deploy $ENVIRONMENT
+      # Pass IMAGE_TAG as third parameter (script uses command-line args)
+      - echo "Running deploy.sh cdk-deploy $ENVIRONMENT $IMAGE_TAG..."
+      - ./deploy.sh cdk-deploy $ENVIRONMENT $IMAGE_TAG
 
   post_build:
     commands:

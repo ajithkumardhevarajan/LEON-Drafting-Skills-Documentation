@@ -231,34 +231,195 @@ class SkillPipelineStack(Stack):
             assumed_by=iam.ServicePrincipal("codebuild.amazonaws.com"),
         )
 
-        # Add CDK deployment permissions
+        # CloudFormation permissions for CDK deployment
+        deploy_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["cloudformation:*"],
+                resources=[
+                    f"arn:aws:cloudformation:{self.region}:{self.account}:stack/a207920-spx-*",
+                ],
+            )
+        )
+
+        # IAM permissions for creating/managing service roles (NOT human-role/*)
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
-                    "cloudformation:*",
-                    "ecs:*",
-                    "ec2:*",
-                    "elasticloadbalancing:*",
-                    "iam:*",
-                    "logs:*",
-                    "ecr:*",
-                    "ssm:*",
-                    "s3:*",
-                    "kms:*",
+                    "iam:CreateRole",
+                    "iam:DeleteRole",
+                    "iam:GetRole",
+                    "iam:PassRole",
+                    "iam:AttachRolePolicy",
+                    "iam:DetachRolePolicy",
+                    "iam:PutRolePolicy",
+                    "iam:DeleteRolePolicy",
+                    "iam:GetRolePolicy",
+                    "iam:TagRole",
+                    "iam:UntagRole",
+                    "iam:CreateServiceLinkedRole",
+                ],
+                resources=[
+                    f"arn:aws:iam::{self.account}:role/a207920-spx-*",
+                    f"arn:aws:iam::{self.account}:role/service-role/a207920-*",
+                ],
+            )
+        )
+
+        # ECS permissions
+        deploy_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["ecs:*"],
+                resources=["*"],
+            )
+        )
+
+        # EC2 permissions for VPC resources
+        deploy_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ec2:DescribeVpcs",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeAvailabilityZones",
+                    "ec2:CreateSecurityGroup",
+                    "ec2:DeleteSecurityGroup",
+                    "ec2:AuthorizeSecurityGroupIngress",
+                    "ec2:AuthorizeSecurityGroupEgress",
+                    "ec2:RevokeSecurityGroupIngress",
+                    "ec2:RevokeSecurityGroupEgress",
+                    "ec2:CreateTags",
+                    "ec2:DeleteTags",
                 ],
                 resources=["*"],
             )
         )
 
-        # Add permissions to assume CDK execution roles
+        # Elastic Load Balancing permissions
+        deploy_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["elasticloadbalancing:*"],
+                resources=["*"],
+            )
+        )
+
+        # SSM Parameter Store permissions
+        deploy_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ssm:PutParameter",
+                    "ssm:GetParameter",
+                    "ssm:GetParameters",
+                    "ssm:DeleteParameter",
+                    "ssm:AddTagsToResource",
+                    "ssm:RemoveTagsFromResource",
+                ],
+                resources=[
+                    f"arn:aws:ssm:{self.region}:{self.account}:parameter/a207920/*",
+                ],
+            )
+        )
+
+        # S3 permissions for CDK staging and artifacts
+        deploy_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:ListBucket",
+                    "s3:GetBucketLocation",
+                    "s3:GetBucketPolicy",
+                ],
+                resources=[
+                    f"arn:aws:s3:::cdk-*-assets-{self.account}-{self.region}",
+                    f"arn:aws:s3:::cdk-*-assets-{self.account}-{self.region}/*",
+                    f"arn:aws:s3:::a207920-assets-{self.account}-{self.region}",
+                    f"arn:aws:s3:::a207920-assets-{self.account}-{self.region}/*",
+                ],
+            )
+        )
+
+        # ECR permissions (read images for deployment)
+        deploy_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ecr:GetAuthorizationToken",
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage",
+                    "ecr:DescribeImages",
+                    "ecr:DescribeRepositories",
+                    "ecr:ListImages",
+                ],
+                resources=["*"],
+            )
+        )
+
+        # Application Auto Scaling permissions
+        deploy_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "application-autoscaling:RegisterScalableTarget",
+                    "application-autoscaling:DeregisterScalableTarget",
+                    "application-autoscaling:PutScalingPolicy",
+                    "application-autoscaling:DeleteScalingPolicy",
+                    "application-autoscaling:DescribeScalableTargets",
+                    "application-autoscaling:DescribeScalingPolicies",
+                ],
+                resources=["*"],
+            )
+        )
+
+        # CloudWatch Logs permissions
+        deploy_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents",
+                    "logs:DescribeLogGroups",
+                    "logs:PutRetentionPolicy",
+                    "logs:DeleteLogGroup",
+                    "logs:TagLogGroup",
+                ],
+                resources=["*"],
+            )
+        )
+
+        # STS AssumeRole for TR CDK bootstrap roles (from a207920-CdkToolkit stack)
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["sts:AssumeRole"],
                 resources=[
-                    f"arn:aws:iam::{self.account}:role/cdk-*",
+                    # TR CDK bootstrap roles
+                    f"arn:aws:iam::{self.account}:role/service-role/a207920-dr-{self.account}-{self.region}",
+                    f"arn:aws:iam::{self.account}:role/service-role/a207920-fpr-{self.account}-{self.region}",
+                    f"arn:aws:iam::{self.account}:role/service-role/a207920-ipr-{self.account}-{self.region}",
+                    f"arn:aws:iam::{self.account}:role/service-role/a207920-lr-{self.account}-{self.region}",
+                    # Also support CDK toolkit roles
                     f"arn:aws:iam::{self.account}:role/a207920-TrcdkToolkit-*",
+                    f"arn:aws:iam::{self.account}:role/a207920-CdkToolkit-*",
+                ],
+            )
+        )
+
+        # PassRole for CloudFormation execution role
+        deploy_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["iam:PassRole"],
+                resources=[
+                    f"arn:aws:iam::{self.account}:role/service-role/a207920-cfn-er-{self.account}-{self.region}",
                 ],
             )
         )
