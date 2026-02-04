@@ -22,7 +22,8 @@ COPY src/ ./src/
 COPY run.py ./
 
 # Runtime stage - minimal image
-FROM python:3.11-slim-bookworm
+# Use AWS ECR Public Gallery to avoid Docker Hub rate limits
+FROM public.ecr.aws/docker/library/python:3.11-slim-bookworm
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
