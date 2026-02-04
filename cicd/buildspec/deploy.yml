@@ -22,7 +22,7 @@ phases:
 
       # Install AWS CDK CLI via npm
       - echo "Installing AWS CDK CLI..."
-      - npm install -g aws-cdk@2.1104.0
+      - npm install -g aws-cdk@2.151.0
       - cdk --version
 
       # Configure pip to use TR JFrog Artifactory for internal packages (tr-cdk-lib)

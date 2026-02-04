@@ -1,9 +1,9 @@
 # AWS CDK dependencies
-aws-cdk-lib>=2.100.0
+aws-cdk-lib==2.151.0
 constructs>=10.0.0
 
 # Thomson Reuters CDK library
-tr-cdk-lib>=1.0.0
+tr-cdk-lib==2.6.0
 
 # Python dependencies
 boto3>=1.26.0
