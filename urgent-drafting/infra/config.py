@@ -11,6 +11,9 @@ from typing import Dict, Any
 # Environment-specific configuration
 ENVIRONMENT_CONFIGS = {
     "dev": {
+        "aws_account": "060725138335",
+        "aws_region": "eu-west-1",
+        "aws_profile": "tr-central-preprod",
         "cpu": 512,
         "memory_mib": 1024,
         "desired_count": 1,
@@ -21,6 +24,9 @@ ENVIRONMENT_CONFIGS = {
         "public_load_balancer": False,
     },
     "qa": {
+        "aws_account": "060725138335",
+        "aws_region": "eu-west-1",
+        "aws_profile": "tr-central-preprod",
         "cpu": 1024,
         "memory_mib": 2048,
         "desired_count": 2,
@@ -31,6 +37,9 @@ ENVIRONMENT_CONFIGS = {
         "public_load_balancer": False,
     },
     "staging": {
+        "aws_account": "060725138335",
+        "aws_region": "eu-west-1",
+        "aws_profile": "tr-central-preprod",
         "cpu": 1024,
         "memory_mib": 2048,
         "desired_count": 2,
@@ -41,6 +50,9 @@ ENVIRONMENT_CONFIGS = {
         "public_load_balancer": False,
     },
     "prod": {
+        "aws_account": "PROD_ACCOUNT_ID",  # To be filled when prod account is created
+        "aws_region": "eu-west-1",
+        "aws_profile": "tr-central-prod",
         "cpu": 2048,
         "memory_mib": 4096,
         "desired_count": 3,
@@ -65,10 +77,10 @@ class MCPConfig:
     service_name: str = "urg-draft"  # Short name for TR CDK naming (avoid 64-char limit)
     service_full_name_display: str = "urgent-drafting"  # Full name for display/logs
 
-    # AWS Configuration
-    aws_account: str = "060725138335"
-    aws_region: str = "eu-west-1"
-    aws_profile: str = "tr-central-preprod"
+    # AWS Configuration - dynamically set based on environment
+    aws_account: str = field(init=False)
+    aws_region: str = field(init=False)
+    aws_profile: str = field(init=False)
     asset_id: str = "207920"
     resource_prefix: str = "a207920"
 
@@ -109,6 +121,13 @@ class MCPConfig:
 
         # Load environment-specific configuration
         env_config = ENVIRONMENT_CONFIGS[self.environment]
+
+        # Load AWS configuration from environment config
+        self.aws_account = env_config["aws_account"]
+        self.aws_region = env_config["aws_region"]
+        self.aws_profile = env_config["aws_profile"]
+
+        # Load resource sizing configuration
         self.cpu = env_config["cpu"]
         self.memory_mib = env_config["memory_mib"]
         self.desired_count = env_config["desired_count"]

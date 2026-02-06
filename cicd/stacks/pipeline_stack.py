@@ -17,10 +17,16 @@ from aws_cdk import (
     aws_codebuild as codebuild,
     aws_iam as iam,
     aws_s3 as s3,
+    aws_sns as sns,
+    aws_sns_subscriptions as sns_subscriptions,
+    aws_lambda as lambda_,
+    aws_events as events,
+    aws_events_targets as events_targets,
     RemovalPolicy,
+    Duration,
 )
 from constructs import Construct
-from typing import List
+from typing import List, Optional
 
 
 class SkillPipelineStack(Stack):
@@ -42,6 +48,7 @@ class SkillPipelineStack(Stack):
         github_owner: str,
         github_repo: str,
         require_approval: bool = False,
+        notification_emails: Optional[List[str]] = None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -151,6 +158,13 @@ class SkillPipelineStack(Stack):
             stage_name="Deploy",
             actions=[deploy_action],
         )
+
+        # Create notification infrastructure if emails are provided
+        if notification_emails and len(notification_emails) > 0:
+            self._create_notification_infrastructure(
+                pipeline=pipeline,
+                notification_emails=notification_emails,
+            )
 
         # Outputs
         cdk.CfnOutput(
@@ -440,4 +454,143 @@ class SkillPipelineStack(Stack):
                 "SKILL_PATH": codebuild.BuildEnvironmentVariable(value=skill_path),
                 "ENVIRONMENT": codebuild.BuildEnvironmentVariable(value=environment),
             },
+        )
+
+    def _create_notification_infrastructure(
+        self,
+        pipeline: codepipeline.Pipeline,
+        notification_emails: List[str],
+    ) -> None:
+        """
+        Create notification infrastructure for deployment events.
+
+        Creates:
+        - SNS topic with email subscriptions
+        - Lambda function to enrich notifications
+        - EventBridge rules to trigger on Deploy stage completion
+
+        Args:
+            pipeline: The CodePipeline to monitor
+            notification_emails: List of email addresses to notify
+        """
+        # Create SNS topic
+        notification_topic = sns.Topic(
+            self,
+            "NotificationTopic",
+            topic_name=f"{self.skill_name}-{self.deploy_env}-notifications",
+            display_name=f"Deployment notifications for {self.skill_name} {self.deploy_env}",
+        )
+
+        # Add email subscriptions
+        for email in notification_emails:
+            notification_topic.add_subscription(
+                sns_subscriptions.EmailSubscription(email)
+            )
+
+        # Create IAM role for Lambda with explicit short name
+        lambda_role = iam.Role(
+            self,
+            "NotificationLambdaRole",
+            role_name=f"{self.skill_name}-{self.deploy_env}-notif-role",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AWSLambdaBasicExecutionRole"
+                ),
+            ],
+        )
+
+        # Create Lambda function for notification enrichment
+        notification_lambda = lambda_.Function(
+            self,
+            "NotificationHandler",
+            function_name=f"{self.skill_name}-{self.deploy_env}-notif-handler",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler="notification_handler.lambda_handler",
+            code=lambda_.Code.from_asset("lambda"),
+            role=lambda_role,
+            timeout=Duration.seconds(60),
+            environment={
+                "SNS_TOPIC_ARN": notification_topic.topic_arn,
+                "SKILL_NAME": self.skill_name,
+                "ENVIRONMENT": self.deploy_env,
+            },
+        )
+
+        # Grant Lambda permissions to publish to SNS
+        notification_topic.grant_publish(lambda_role)
+
+        # Allow Lambda to read pipeline execution details
+        lambda_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "codepipeline:GetPipelineExecution",
+                    "codepipeline:GetPipelineState",
+                    "codepipeline:ListPipelineExecutions",
+                ],
+                resources=[pipeline.pipeline_arn],
+            )
+        )
+
+        # Allow Lambda to read artifacts from S3
+        lambda_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "s3:GetObject",
+                    "s3:GetObjectVersion",
+                ],
+                resources=[
+                    f"{pipeline.artifact_bucket.bucket_arn}/*",
+                ],
+            )
+        )
+
+        # EventBridge rule for Deploy stage SUCCESS
+        success_rule = events.Rule(
+            self,
+            "DeploymentSuccessRule",
+            rule_name=f"{self.skill_name}-{self.deploy_env}-deploy-success",
+            description=f"Notify on {self.skill_name} {self.deploy_env} Deploy stage success",
+            event_pattern=events.EventPattern(
+                source=["aws.codepipeline"],
+                detail_type=["CodePipeline Stage Execution State Change"],
+                detail={
+                    "pipeline": [pipeline.pipeline_name],
+                    "stage": ["Deploy"],
+                    "state": ["SUCCEEDED"],
+                },
+            ),
+        )
+
+        # Add targets: Lambda for enrichment
+        success_rule.add_target(events_targets.LambdaFunction(notification_lambda))
+
+        # EventBridge rule for Deploy stage FAILURE
+        failure_rule = events.Rule(
+            self,
+            "DeploymentFailureRule",
+            rule_name=f"{self.skill_name}-{self.deploy_env}-deploy-failure",
+            description=f"Notify on {self.skill_name} {self.deploy_env} Deploy stage failure",
+            event_pattern=events.EventPattern(
+                source=["aws.codepipeline"],
+                detail_type=["CodePipeline Stage Execution State Change"],
+                detail={
+                    "pipeline": [pipeline.pipeline_name],
+                    "stage": ["Deploy"],
+                    "state": ["FAILED"],
+                },
+            ),
+        )
+
+        # Add targets: Lambda for enrichment
+        failure_rule.add_target(events_targets.LambdaFunction(notification_lambda))
+
+        # Output
+        cdk.CfnOutput(
+            self,
+            "NotificationTopicArn",
+            value=notification_topic.topic_arn,
+            description="SNS topic ARN for deployment notifications",
         )

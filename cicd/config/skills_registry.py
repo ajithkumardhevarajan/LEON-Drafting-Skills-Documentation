@@ -17,12 +17,20 @@ SKILLS_REGISTRY: Dict[str, Dict[str, Any]] = {
         "path": "urgent-drafting",  # Path in repository
         "environments": ["dev", "qa"],  # Environments to create pipelines for
         "description": "Urgent drafting skill for Leon assistant",
+        "notifications": {
+            "emails": ["simranjit.kamboj@thomsonreuters.com", "michal.zarow@thomsonreuters.com"],  # Email addresses for deployment notifications
+            "enabled": True,  # Set to False to disable notifications for this skill
+        },
     },
     # Add future skills here:
     # "future-skill": {
     #     "path": "future-skill",
     #     "environments": ["dev", "qa"],
     #     "description": "Description of future skill",
+    #     "notifications": {
+    #         "emails": ["team@example.com"],
+    #         "enabled": True,
+    #     },
     # },
 }
 
@@ -40,14 +48,29 @@ ENVIRONMENTS: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# AWS Configuration
-AWS_CONFIG = {
-    "account": "060725138335",
-    "region": "eu-west-1",
-    "profile": "tr-central-preprod",
-    "asset_id": "207920",
-    "resource_owner": "iridium@trten.onmicrosoft.com",
+# AWS Configuration - Per-account configuration for multi-account deployment
+AWS_CONFIGS = {
+    "preprod": {
+        "account": "060725138335",
+        "region": "eu-west-1",
+        "profile": "tr-central-preprod",
+        "asset_id": "207920",
+        "resource_owner": "iridium@trten.onmicrosoft.com",
+        "environments": ["dev", "qa"],  # Environments in this account
+    },
+    "prod": {
+        "account": "PROD_ACCOUNT_ID",  # To be filled when prod account is created
+        "region": "eu-west-1",
+        "profile": "tr-central-prod",
+        "asset_id": "207920",
+        "resource_owner": "iridium@trten.onmicrosoft.com",
+        "environments": ["prod"],  # Environments in this account
+    },
 }
+
+# Default AWS config for backward compatibility
+# Uses preprod account (where dev/qa environments run)
+AWS_CONFIG = AWS_CONFIGS["preprod"]
 
 # CodeStar Connection for GitHub
 # Created in AWS Console: Developer Tools -> Connections
@@ -77,6 +100,35 @@ def get_skill_path_filter(skill_name: str) -> List[str]:
     return [f"{skill_path}/**"]
 
 
+def get_aws_config_for_environment(environment: str) -> Dict[str, Any]:
+    """
+    Get AWS configuration for a specific environment.
+
+    Args:
+        environment: Environment name (dev, qa, prod, etc.)
+
+    Returns:
+        AWS configuration dict for the account that hosts this environment
+
+    Raises:
+        ValueError: If environment is not configured in any AWS account
+    """
+    for aws_config in AWS_CONFIGS.values():
+        if environment in aws_config.get("environments", []):
+            return {
+                "account": aws_config["account"],
+                "region": aws_config["region"],
+                "profile": aws_config["profile"],
+                "asset_id": aws_config["asset_id"],
+                "resource_owner": aws_config["resource_owner"],
+            }
+
+    raise ValueError(
+        f"Environment '{environment}' not found in any AWS account configuration. "
+        f"Available environments: {[env for cfg in AWS_CONFIGS.values() for env in cfg.get('environments', [])]}"
+    )
+
+
 def validate_registry() -> None:
     """Validate the skills registry configuration."""
     errors = []
@@ -95,6 +147,14 @@ def validate_registry() -> None:
                     f"Skill '{skill_name}' references unknown environment '{env}'. "
                     f"Valid environments: {', '.join(ENVIRONMENTS.keys())}"
                 )
+
+    # Validate AWS account configurations
+    all_configured_envs = [env for cfg in AWS_CONFIGS.values() for env in cfg.get("environments", [])]
+    for env_name in ENVIRONMENTS.keys():
+        if env_name not in all_configured_envs:
+            errors.append(
+                f"Environment '{env_name}' is defined in ENVIRONMENTS but not assigned to any AWS account in AWS_CONFIGS"
+            )
 
     if errors:
         raise ValueError("Registry validation failed:\n" + "\n".join(f"  - {e}" for e in errors))

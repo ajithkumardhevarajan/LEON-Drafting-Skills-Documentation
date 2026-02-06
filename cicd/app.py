@@ -67,6 +67,10 @@ def main():
         skill_path = skill_config["path"]
         skill_description = skill_config.get("description", skill_name)
 
+        # Extract notification configuration
+        notification_config = skill_config.get("notifications", {})
+        notification_emails = notification_config.get("emails", []) if notification_config.get("enabled", True) else []
+
         for environment in skill_config["environments"]:
             if environment not in ENVIRONMENTS:
                 print(f"WARNING: Skipping unknown environment '{environment}' for skill '{skill_name}'")
@@ -91,6 +95,7 @@ def main():
                 github_owner=GITHUB_CONFIG["owner"],
                 github_repo=GITHUB_CONFIG["repo"],
                 require_approval=env_config["require_approval"],
+                notification_emails=notification_emails,
                 env=cdk.Environment(
                     account=AWS_CONFIG["account"],
                     region=AWS_CONFIG["region"],
