@@ -270,11 +270,21 @@ build_image() {
     if [[ -z "${JFROG_USERNAME:-}" || -z "${JFROG_TOKEN:-}" ]]; then
         echo -e "${RED}ERROR:${NC} JFROG_USERNAME and JFROG_TOKEN must be set for private package access"
         echo -e "  This build requires private package: reuters-ai-assistant-mcp-hitl"
-        echo -e "  Set credentials or run from pipeline which loads them from SSM"
+        echo -e "\n  Current credential status:"
+        echo -e "    JFROG_USERNAME: $([ -n "${JFROG_USERNAME:-}" ] && echo "SET (length: ${#JFROG_USERNAME})" || echo "NOT SET")"
+        echo -e "    JFROG_TOKEN: $([ -n "${JFROG_TOKEN:-}" ] && echo "SET (length: ${#JFROG_TOKEN})" || echo "NOT SET")"
+        echo -e "\n  For pipeline builds:"
+        echo -e "    Ensure parameter-store is configured in buildspec.yml"
+        echo -e "    Check SSM parameters: /a207920/leon-skills/jfrog/username and /a207920/leon-skills/jfrog/token"
+        echo -e "\n  For local builds:"
+        echo -e "    export JFROG_USERNAME=\$(aws ssm get-parameter --name '/a207920/leon-skills/jfrog/username' --with-decryption --query 'Parameter.Value' --output text)"
+        echo -e "    export JFROG_TOKEN=\$(aws ssm get-parameter --name '/a207920/leon-skills/jfrog/token' --with-decryption --query 'Parameter.Value' --output text)"
         exit 1
     fi
 
     echo -e "${BLUE}Using JFrog credentials for private package access${NC}"
+    echo -e "  Username: ${JFROG_USERNAME:0:3}*** (${#JFROG_USERNAME} chars)"
+    echo -e "  Token: *** (${#JFROG_TOKEN} chars)"
     docker build --platform linux/arm64 \
         --build-arg JFROG_USERNAME="$JFROG_USERNAME" \
         --build-arg JFROG_TOKEN="$JFROG_TOKEN" \
