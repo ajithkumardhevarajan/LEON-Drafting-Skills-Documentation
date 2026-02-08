@@ -176,3 +176,21 @@ class HealthResponse(BaseModel):
     uptime_seconds: float
     server_name: str
     version: str
+
+
+# ============================================================================
+# Asset Models for Urgent Drafting
+# ============================================================================
+
+class Asset(BaseModel):
+    """News asset from Reuters API"""
+    id: str
+    headline: str
+    body: Optional[str] = None
+    modified_at: Optional[str] = None
+    usn: Optional[str] = None
+
+
+class SelectableAsset(Asset):
+    """Asset with selection state for urgent builder"""
+    included: bool = True  # CRITICAL: Default is True - all assets start included

@@ -211,49 +211,34 @@ class UrgentDraftingMCPServer:
         self, request_id: Optional[str], params: Dict[str, Any], headers: Dict[str, str]
     ) -> JSONResponse:
         """
-        Handle tools/call request.
+        Handle tools/call request with mcp-hitl support.
 
-        Executes a tool and returns the result.
+        Executes a tool and returns the result, with automatic interrupt handling.
         """
+        # Import mcp_hitl handler
+        from mcp_hitl import handle_tool_call
+
         tool_name = params.get("name")
         arguments = params.get("arguments", {})
 
         logger.info(f"Calling tool: {tool_name} with args: {arguments}")
 
-        try:
-            # Extract JWT token from Authorization header
-            jwt_token = headers.get("authorization", "").removeprefix("Bearer ")
+        # Extract JWT token from Authorization header
+        jwt_token = headers.get("authorization", "").removeprefix("Bearer ")
 
-            # Execute tool
-            result = await tool_registry.execute_tool(
-                tool_name, arguments, jwt_token
-            )
-
-            logger.info(f"Tool {tool_name} executed successfully")
-            return JSONResponse(
-                content={
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "result": {
-                        "content": result.content,
-                        "isError": result.isError,
-                    },
-                }
-            )
-
-        except ValueError as e:
-            # Tool not found
-            logger.error(f"Tool not found: {tool_name}")
-            return self._error_response(request_id, -32602, str(e))
-
-        except Exception as e:
-            # Execution error
-            logger.error(
-                f"Error executing tool {tool_name}: {str(e)}", exc_info=True
-            )
-            return self._error_response(
-                request_id, -32603, f"Tool execution failed: {str(e)}"
-            )
+        # Use mcp_hitl helper for automatic interrupt handling
+        # This handles:
+        # - Normal tool execution
+        # - Interrupt responses with continuation tokens
+        # - Resume with user responses
+        # - Proper JSON-RPC formatting
+        return await handle_tool_call(
+            tool_name=tool_name,
+            arguments=arguments,
+            jwt_token=jwt_token,
+            request_id=request_id,
+            tool_registry=tool_registry
+        )
 
     async def _handle_list_resources(
         self, request_id: Optional[str], params: Dict[str, Any]

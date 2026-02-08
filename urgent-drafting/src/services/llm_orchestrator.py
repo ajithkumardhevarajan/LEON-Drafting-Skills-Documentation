@@ -1,0 +1,251 @@
+"""LLM Orchestrator Service for Azure OpenAI"""
+
+from openai import AzureOpenAI
+from typing import List, Dict, Optional
+import logging
+from ..config.llm_config import get_llm_config, LLMConfig
+from ..config.model_constants import is_mini_model, Models
+from ..utils.azure_token_util import generate_azure_token, AzureTokenConfig
+
+logger = logging.getLogger(__name__)
+
+
+class LLMOrchestrator:
+    """Azure OpenAI client for urgent drafting with LLM orchestration"""
+
+    def __init__(self, config: Optional[LLMConfig] = None):
+        """
+        Initialize LLM Orchestrator
+
+        Args:
+            config: Optional LLM configuration. If None, loads from environment.
+        """
+        self.config = config or get_llm_config()
+        self._client = None
+
+    def _uses_orchestrator(self) -> bool:
+        """Check if orchestrator configuration is available"""
+        return self.config.orchestrator is not None
+
+    def _is_mini_model(self, model: str) -> bool:
+        """Check if model is a mini model that doesn't support system messages"""
+        return is_mini_model(model)
+
+    def _get_deployment(self, model: str) -> str:
+        """Get deployment name for a model"""
+        if self._uses_orchestrator():
+            orchestrator = self.config.orchestrator
+            deployment_config = orchestrator.deployments.get(model)
+            if not deployment_config:
+                logger.warning(f"No orchestrator deployment found for {model}, using model name as deployment")
+                return model
+            return deployment_config.deployment
+
+        # Fallback to direct Azure OpenAI deployments
+        if model == "gpt-4-1":
+            return self.config.gpt4_1_deployment
+        elif model == "gpt-4o":
+            return self.config.gpt4o_deployment
+        else:
+            return model
+
+    def _get_api_version(self, model: str) -> str:
+        """Get API version for a model, with deployment-specific override"""
+        if self._uses_orchestrator():
+            orchestrator = self.config.orchestrator
+            deployment_config = orchestrator.deployments.get(model)
+            if deployment_config and deployment_config.api_version:
+                return deployment_config.api_version
+            return orchestrator.api_version
+        return self.config.api_version
+
+    def _get_model_name(self, model: str) -> str:
+        """Get actual model name for a deployment"""
+        if self._uses_orchestrator():
+            orchestrator = self.config.orchestrator
+            deployment_config = orchestrator.deployments.get(model)
+            if deployment_config and deployment_config.model:
+                return deployment_config.model
+        return model
+
+    def _get_deployment_headers(self, model: str) -> Dict[str, str]:
+        """Get deployment-specific headers"""
+        if self._uses_orchestrator():
+            orchestrator = self.config.orchestrator
+            deployment_config = orchestrator.deployments.get(model)
+            if deployment_config and deployment_config.headers:
+                return deployment_config.headers
+        return {}
+
+    async def _initialize_client(
+        self,
+        model: str,
+        deployment: Optional[str] = None
+    ) -> AzureOpenAI:
+        """
+        Initialize Azure OpenAI client with orchestrator support.
+
+        Creates a new client with token authentication if using orchestrator,
+        otherwise uses direct Azure OpenAI with API key.
+
+        Args:
+            model: Model name to get configuration for
+            deployment: Optional deployment override
+
+        Returns:
+            Configured AzureOpenAI client
+        """
+        if self._uses_orchestrator():
+            orchestrator = self.config.orchestrator
+
+            # Generate Azure AD token
+            token = None
+            if orchestrator.tenant_id and orchestrator.client_id and orchestrator.client_secret:
+                token_config = AzureTokenConfig(
+                    tenant_id=orchestrator.tenant_id,
+                    client_id=orchestrator.client_id,
+                    client_secret=orchestrator.client_secret,
+                    resource=orchestrator.resource or "https://cognitiveservices.azure.com/.default"
+                )
+                token = await generate_azure_token(token_config)
+
+                if not token:
+                    raise RuntimeError("Failed to generate Azure AD token for LLM Orchestrator")
+
+            # Build headers
+            default_headers = {
+                "Content-Type": "application/json",
+            }
+
+            # Add authentication headers
+            # Note: Some orchestrators may require both token AND api-key
+            if token:
+                default_headers["Authorization"] = f"Bearer {token}"
+                logger.info("Using Azure AD token authentication for orchestrator")
+
+            # Always add api-key if available (may be needed alongside token)
+            if orchestrator.api_key:
+                default_headers["api-key"] = orchestrator.api_key
+                logger.debug("Added api-key header to request")
+
+            # Ensure at least one auth method is present
+            if not token and not orchestrator.api_key:
+                raise RuntimeError("No authentication method available for orchestrator")
+
+            # Add global headers from config
+            if orchestrator.headers:
+                default_headers.update(orchestrator.headers)
+                logger.debug(f"Applied {len(orchestrator.headers)} global headers")
+
+            # Add deployment-specific headers
+            deployment_headers = self._get_deployment_headers(model)
+            if deployment_headers:
+                default_headers.update(deployment_headers)
+                logger.debug(f"Applied {len(deployment_headers)} deployment-specific headers")
+
+            logger.info(
+                f"Creating LLM Orchestrator client: endpoint={orchestrator.endpoint}, "
+                f"model={model}, deployment={deployment or self._get_deployment(model)}"
+            )
+
+            # Create client with orchestrator endpoint
+            # Note: api_key is required by OpenAI client even if using token auth
+            api_key_value = orchestrator.api_key if orchestrator.api_key else "not-used-with-token-auth"
+
+            client = AzureOpenAI(
+                api_key=api_key_value,
+                api_version=self._get_api_version(model),
+                azure_endpoint=orchestrator.endpoint,
+                default_headers=default_headers
+            )
+
+            return client
+
+        else:
+            # Fallback: Direct Azure OpenAI connection
+            logger.info(f"Creating direct Azure OpenAI client: endpoint={self.config.endpoint}")
+            return AzureOpenAI(
+                api_key=self.config.api_key,
+                api_version=self.config.api_version,
+                azure_endpoint=self.config.endpoint,
+            )
+
+    async def invoke(
+        self,
+        messages: List[Dict[str, str]],
+        model: str = "gpt-4-1",
+        temperature: float = 0.05,
+        max_tokens: Optional[int] = None
+    ) -> str:
+        """
+        Invoke LLM with messages and return response
+
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            model: Model to use ("gpt-4-1", "gpt-4o", "o1-mini", etc.)
+            temperature: Sampling temperature (0-1)
+            max_tokens: Maximum tokens in response
+
+        Returns:
+            Generated text response
+        """
+        try:
+            # Initialize client with model-specific configuration
+            client = await self._initialize_client(model)
+
+            # Get deployment and model name
+            deployment = self._get_deployment(model)
+            model_name = self._get_model_name(model)
+
+            # Handle mini models: convert system messages to user messages
+            formatted_messages = messages
+            if self._is_mini_model(model):
+                formatted_messages = [
+                    {"role": "user", "content": msg["content"]} if msg["role"] == "system" else msg
+                    for msg in messages
+                ]
+                logger.debug(
+                    f"Converted system messages to user messages for mini model {model}"
+                )
+
+            logger.info(
+                f"LLM Request: model={model}, deployment={deployment}, "
+                f"messages={len(formatted_messages)}, temp={temperature}, "
+                f"uses_orchestrator={self._uses_orchestrator()}"
+            )
+
+            # Make the API call
+            response = client.chat.completions.create(
+                model=deployment,
+                messages=formatted_messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+            content = response.choices[0].message.content
+
+            logger.info(
+                f"LLM Response: {len(content)} characters, "
+                f"tokens={response.usage.total_tokens if response.usage else 'N/A'}"
+            )
+
+            return content
+
+        except Exception as e:
+            logger.error(
+                f"LLM invocation failed: model={model}, error={str(e)}",
+                exc_info=True
+            )
+            raise
+
+
+# Global singleton instance
+_llm_orchestrator = None
+
+
+def get_llm_orchestrator() -> LLMOrchestrator:
+    """Get global LLM orchestrator instance"""
+    global _llm_orchestrator
+    if _llm_orchestrator is None:
+        _llm_orchestrator = LLMOrchestrator()
+    return _llm_orchestrator

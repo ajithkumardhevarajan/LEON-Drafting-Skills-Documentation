@@ -15,6 +15,7 @@ from aws_cdk import (
     aws_ecs_patterns as ecs_patterns,
     aws_elasticloadbalancingv2 as elbv2,
     aws_ssm as ssm,
+    aws_secretsmanager as secretsmanager,
     aws_logs as logs,
     RemovalPolicy
 )
@@ -87,7 +88,7 @@ class MCPStack(Stack):
 
     def _create_iam_roles(self):
         """Create IAM roles for ECS tasks"""
-        # Task execution role (for pulling images and writing logs)
+        # Task execution role (for pulling images, writing logs, and reading secrets)
         # Note: Not specifying role_name - let TR CDK auto-generate to avoid 64-char limit
         execution_role = iam.Role(
             self,
@@ -98,6 +99,17 @@ class MCPStack(Stack):
                     "service-role/AmazonECSTaskExecutionRolePolicy"
                 )
             ],
+        )
+
+        # Grant Secrets Manager access to execution role
+        # This allows ECS to read secrets at container startup
+        execution_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"],
+                resources=[
+                    f"{self.config.secrets_arn}*"  # Allow access to versioned secrets
+                ],
+            )
         )
 
         # Task role (for application permissions)
@@ -136,8 +148,15 @@ class MCPStack(Stack):
             ),
         )
 
-        # Get environment variables from config
+        # Get environment variables from config (from .env file)
         env_vars = self.config.get_environment_variables()
+
+        # Load orchestrator secrets from AWS Secrets Manager
+        orchestrator_secret = secretsmanager.Secret.from_secret_complete_arn(
+            self,
+            "OrchestratorSecret",
+            secret_complete_arn=self.config.secrets_arn
+        )
 
         # Create CloudWatch log group
         log_group = logs.LogGroup(
@@ -156,7 +175,7 @@ class MCPStack(Stack):
             tag=self.image_tag,
         )
 
-        # Add container
+        # Add container with both environment variables and secrets
         container = task_def.add_container(
             "Container",
             container_name=f"{self.config.service_name}-container",
@@ -165,7 +184,33 @@ class MCPStack(Stack):
                 stream_prefix=self.config.service_name,
                 log_group=log_group,
             ),
-            environment=env_vars,
+            environment=env_vars,  # Plain environment variables from .env
+            secrets={  # Secrets from AWS Secrets Manager (injected at runtime)
+                "ORCHESTRATOR_ENDPOINT": ecs.Secret.from_secrets_manager(
+                    orchestrator_secret, "ORCHESTRATOR_ENDPOINT"
+                ),
+                "ORCHESTRATOR_API_VERSION": ecs.Secret.from_secrets_manager(
+                    orchestrator_secret, "ORCHESTRATOR_API_VERSION"
+                ),
+                "LEON_ORCHESTRATOR_TENANT_ID": ecs.Secret.from_secrets_manager(
+                    orchestrator_secret, "LEON_ORCHESTRATOR_TENANT_ID"
+                ),
+                "LEON_ORCHESTRATOR_CLIENT_ID": ecs.Secret.from_secrets_manager(
+                    orchestrator_secret, "LEON_ORCHESTRATOR_CLIENT_ID"
+                ),
+                "LEON_ORCHESTRATOR_CLIENT_SECRET": ecs.Secret.from_secrets_manager(
+                    orchestrator_secret, "LEON_ORCHESTRATOR_CLIENT_SECRET"
+                ),
+                "LEON_ORCHESTRATOR_RESOURCE": ecs.Secret.from_secrets_manager(
+                    orchestrator_secret, "LEON_ORCHESTRATOR_RESOURCE"
+                ),
+                "LEON_ORCHESTRATOR_API_KEY": ecs.Secret.from_secrets_manager(
+                    orchestrator_secret, "LEON_ORCHESTRATOR_API_KEY"
+                ),
+                "ORCHESTRATOR_DEPLOYMENT_GPT4_1": ecs.Secret.from_secrets_manager(
+                    orchestrator_secret, "ORCHESTRATOR_DEPLOYMENT_GPT4_1"
+                ),
+            },
         )
 
         container.add_port_mappings(

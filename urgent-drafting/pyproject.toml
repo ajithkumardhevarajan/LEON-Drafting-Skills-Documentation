@@ -9,6 +9,11 @@ dependencies = [
     "uvicorn>=0.24.0",
     "pydantic>=2.4.0",
     "python-multipart>=0.0.6",
+    "reuters-ai-assistant-mcp-hitl>=0.3.7",
+    "openai>=1.0.0",
+    "httpx>=0.24.0",
+    "python-dotenv>=1.0.0",
+    "azure-identity>=1.15.0",
 ]
 
 [project.scripts]

@@ -106,6 +106,9 @@ class MCPConfig:
     # SSM Parameters - dynamically set based on environment
     ssm_parameter_prefix: str = field(init=False)
 
+    # AWS Secrets Manager - orchestrator configuration (dynamically set)
+    secrets_arn: str = field(init=False)
+
     # Tags
     project_name: str = "sphinx"
     service_full_name: str = "sphinx-urgent-drafting-skill"
@@ -139,6 +142,12 @@ class MCPConfig:
 
         # Set ECR repository name with environment suffix
         self.ecr_repository_name = f"{self.resource_prefix}/{self.mcp_name}/{self.environment}"
+
+        # Set Secrets Manager ARN dynamically based on account and region
+        self.secrets_arn = (
+            f"arn:aws:secretsmanager:{self.aws_region}:{self.aws_account}:"
+            f"secret:{self.resource_prefix}-leon-skills"
+        )
 
         # Set SSM parameter prefix with environment
         self.ssm_parameter_prefix = f"/a207920/urg-draft/{self.environment}"

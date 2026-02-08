@@ -11,13 +11,18 @@ To add a new tool:
 """
 
 from .base import BaseTool, ToolRegistry
-from .urgent_draft_tool import UrgentDraftTool
+from .generate_urgent_draft import GenerateUrgentDraftTool
 
 # Initialize the global tool registry
 tool_registry = ToolRegistry()
 
-# Register all available tools
-tool_registry.register(UrgentDraftTool())
+# Register the urgent draft generation tool
+tool_registry.register(GenerateUrgentDraftTool())
 
 # Export for use by main.py
-__all__ = ["BaseTool", "ToolRegistry", "tool_registry", "UrgentDraftTool"]
+__all__ = [
+    "BaseTool",
+    "ToolRegistry",
+    "tool_registry",
+    "GenerateUrgentDraftTool"
+]

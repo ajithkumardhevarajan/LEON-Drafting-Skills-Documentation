@@ -1,0 +1,5 @@
+[[index]]
+name = "pypi"
+publish-url = "https://tr1.jfrog.io/artifactory/api/pypi/pypi"
+url = "https://tr1.jfrog.io/artifactory/api/pypi/pypi/simple"
+default = true
