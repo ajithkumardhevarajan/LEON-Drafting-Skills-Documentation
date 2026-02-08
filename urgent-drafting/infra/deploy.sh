@@ -265,7 +265,20 @@ create_ecr_repo() {
 build_image() {
     echo -e "\n${BLUE}Building Docker image...${NC}"
     cd "$MCP_ROOT"
-    docker build --platform linux/arm64 -t "$ECR_REPO:$IMAGE_TAG" .
+
+    # Pass JFrog credentials as build args (required for private packages)
+    if [[ -z "${JFROG_USERNAME:-}" || -z "${JFROG_TOKEN:-}" ]]; then
+        echo -e "${RED}ERROR:${NC} JFROG_USERNAME and JFROG_TOKEN must be set for private package access"
+        echo -e "  This build requires private package: reuters-ai-assistant-mcp-hitl"
+        echo -e "  Set credentials or run from pipeline which loads them from SSM"
+        exit 1
+    fi
+
+    echo -e "${BLUE}Using JFrog credentials for private package access${NC}"
+    docker build --platform linux/arm64 \
+        --build-arg JFROG_USERNAME="$JFROG_USERNAME" \
+        --build-arg JFROG_TOKEN="$JFROG_TOKEN" \
+        -t "$ECR_REPO:$IMAGE_TAG" .
     if [[ $? -eq 0 ]]; then
         echo -e "${GREEN}✓ Image built successfully${NC}"
     else

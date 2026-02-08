@@ -6,15 +6,24 @@
 # Builder stage - use uv for dependency management
 FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim as builder
 
+# Accept JFrog credentials as build arguments (for private packages)
+ARG JFROG_USERNAME
+ARG JFROG_TOKEN
+
 # Set working directory
 WORKDIR /app
 
 # Copy dependency files
 COPY pyproject.toml ./
+COPY uv.toml ./
 RUN touch README.md
 
-# Install dependencies
+# Install dependencies with JFrog authentication (required for private packages)
+# uv.toml already configures the JFrog URL, we just inject credentials via env vars
+# uv will automatically add credentials to the URL from uv.toml
 RUN uv venv && \
+    UV_INDEX_pypi_USERNAME="${JFROG_USERNAME}" \
+    UV_INDEX_pypi_PASSWORD="${JFROG_TOKEN}" \
     uv pip install -e .
 
 # Copy source code

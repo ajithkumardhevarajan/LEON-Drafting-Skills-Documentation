@@ -20,6 +20,14 @@ phases:
   pre_build:
     commands:
       - echo "Starting build phase for $SKILL_PATH in $ENVIRONMENT environment"
+
+      # Configure JFrog credentials for Docker build (same as deploy.yml)
+      - echo "Fetching JFrog credentials from SSM Parameter Store..."
+      - |
+        export JFROG_USERNAME=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/username" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
+        export JFROG_TOKEN=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/token" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
+        echo "JFrog credentials loaded and exported for Docker build"
+
       - source $HOME/.local/bin/env || export PATH="$HOME/.local/bin:$PATH"
 
   build:
