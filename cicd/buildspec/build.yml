@@ -7,9 +7,6 @@ env:
   shell: bash
   variables:
     UV_HOME: "$HOME/.local/bin"
-  parameter-store:
-    JFROG_USERNAME: /a207920/leon-skills/jfrog/username
-    JFROG_TOKEN: /a207920/leon-skills/jfrog/token
 
 phases:
   install:
@@ -19,6 +16,15 @@ phases:
       - curl -LsSf https://astral.sh/uv/install.sh | sh
       - source $HOME/.local/bin/env
       - uv --version
+
+      # Configure JFrog credentials for Docker build (same as deploy.yml)
+      - echo "Fetching JFrog credentials from SSM Parameter Store..."
+      - |
+        JFROG_USERNAME=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/username" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
+        JFROG_TOKEN=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/token" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
+        export JFROG_USERNAME
+        export JFROG_TOKEN
+        echo "JFrog credentials loaded: username=${JFROG_USERNAME:0:3}***"
 
   pre_build:
     commands:
@@ -30,20 +36,8 @@ phases:
       - echo "Building and pushing Docker image using deploy.sh..."
       - source $HOME/.local/bin/env || export PATH="$HOME/.local/bin:$PATH"
 
-      # JFrog credentials are auto-loaded from parameter-store by CodeBuild
-      # Verify they're available before proceeding
+      # JFrog credentials were loaded in install phase - use them here
       - |
-        set -e  # Exit immediately if any command fails
-
-        echo "Verifying JFrog credentials from parameter-store..."
-        if [ -z "$JFROG_USERNAME" ] || [ -z "$JFROG_TOKEN" ]; then
-          echo "ERROR: JFROG credentials not loaded from parameter-store"
-          echo "  JFROG_USERNAME is set: $([ -n "$JFROG_USERNAME" ] && echo 'yes' || echo 'no')"
-          echo "  JFROG_TOKEN is set: $([ -n "$JFROG_TOKEN" ] && echo 'yes' || echo 'no')"
-          exit 1
-        fi
-        echo "JFrog credentials verified: username=${JFROG_USERNAME:0:3}*** (masked)"
-
         cd $SKILL_PATH/infra
         chmod +x deploy.sh
 
