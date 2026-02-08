@@ -29,17 +29,28 @@ phases:
 
       # Export JFrog credentials and run both build and push in same shell context
       - |
+        set -e  # Exit immediately if any command fails
+
         export JFROG_USERNAME=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/username" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
         export JFROG_TOKEN=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/token" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
         echo "JFrog credentials exported: username=${JFROG_USERNAME:0:3}*** (masked)"
+
         cd $SKILL_PATH/infra
         chmod +x deploy.sh
 
-        # deploy.sh build handles Docker build with auto-versioning
-        ./deploy.sh build $ENVIRONMENT
+        # Compute version once and reuse for both build and push
+        echo "Computing image version..."
+        IMAGE_TAG=$(./deploy.sh version)
+        echo "Using image tag: $IMAGE_TAG"
+        export IMAGE_TAG
 
-        # deploy.sh push handles ECR login and push (auto-computes IMAGE_TAG internally)
-        ./deploy.sh push $ENVIRONMENT
+        # Build with the computed tag
+        echo "Building Docker image..."
+        ./deploy.sh build $ENVIRONMENT $IMAGE_TAG
+
+        # Push the same tag
+        echo "Pushing Docker image to ECR..."
+        ./deploy.sh push $ENVIRONMENT $IMAGE_TAG
 
       # Get the most recently pushed image tag from ECR
       - |
