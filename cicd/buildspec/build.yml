@@ -20,28 +20,26 @@ phases:
   pre_build:
     commands:
       - echo "Starting build phase for $SKILL_PATH in $ENVIRONMENT environment"
-
-      # Configure JFrog credentials for Docker build (same as deploy.yml)
-      - echo "Fetching JFrog credentials from SSM Parameter Store..."
-      - |
-        export JFROG_USERNAME=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/username" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
-        export JFROG_TOKEN=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/token" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
-        echo "JFrog credentials loaded and exported for Docker build"
-
       - source $HOME/.local/bin/env || export PATH="$HOME/.local/bin:$PATH"
 
   build:
     commands:
       - echo "Building and pushing Docker image using deploy.sh..."
       - source $HOME/.local/bin/env || export PATH="$HOME/.local/bin:$PATH"
-      - cd $SKILL_PATH/infra
-      - chmod +x deploy.sh
 
-      # deploy.sh build handles Docker build with auto-versioning
-      - ./deploy.sh build $ENVIRONMENT
+      # Export JFrog credentials and run both build and push in same shell context
+      - |
+        export JFROG_USERNAME=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/username" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
+        export JFROG_TOKEN=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/token" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
+        echo "JFrog credentials exported: username=${JFROG_USERNAME:0:3}*** (masked)"
+        cd $SKILL_PATH/infra
+        chmod +x deploy.sh
 
-      # deploy.sh push handles ECR login and push (auto-computes IMAGE_TAG internally)
-      - ./deploy.sh push $ENVIRONMENT
+        # deploy.sh build handles Docker build with auto-versioning
+        ./deploy.sh build $ENVIRONMENT
+
+        # deploy.sh push handles ECR login and push (auto-computes IMAGE_TAG internally)
+        ./deploy.sh push $ENVIRONMENT
 
       # Get the most recently pushed image tag from ECR
       - |
