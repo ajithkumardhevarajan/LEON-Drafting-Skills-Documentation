@@ -22,6 +22,15 @@ SKILLS_REGISTRY: Dict[str, Dict[str, Any]] = {
             "enabled": True,  # Set to False to disable notifications for this skill
         },
     },
+    "spot-story": {
+        "path": "spot-story",  # Path in repository
+        "environments": ["dev", "qa"],  # Environments to create pipelines for
+        "description": "Spot story generation skill for Leon assistant",
+        "notifications": {
+            "emails": ["simranjit.kamboj@thomsonreuters.com"],  # Email addresses for deployment notifications
+            "enabled": True,  # Set to False to disable notifications for this skill
+        },
+    },
     # Add future skills here:
     # "future-skill": {
     #     "path": "future-skill",

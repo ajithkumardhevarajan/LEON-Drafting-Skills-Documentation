@@ -1,0 +1,8 @@
+[[index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+[[index]]
+name = "jfrog"
+url = "https://tr1.jfrog.io/artifactory/api/pypi/pypi/simple"
