@@ -143,11 +143,11 @@ class MCPConfig:
         # Set ECR repository name with environment suffix
         self.ecr_repository_name = f"{self.resource_prefix}/{self.mcp_name}/{self.environment}"
 
-        # Set Secrets Manager ARN dynamically based on account and region
-        # Partial ARN without the 6-character suffix (will be matched with wildcard)
+        # Set Secrets Manager ARN with full suffix (hardcoded for now)
+        # TODO: Make this environment-specific or use secret name lookup
         self.secrets_arn = (
             f"arn:aws:secretsmanager:{self.aws_region}:{self.aws_account}:"
-            f"secret:{self.resource_prefix}-leon-skills"
+            f"secret:{self.resource_prefix}-leon-skills-vWvmX7"
         )
 
         # Set SSM parameter prefix with environment

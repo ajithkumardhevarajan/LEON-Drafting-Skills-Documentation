@@ -107,7 +107,7 @@ class MCPStack(Stack):
                             effect=iam.Effect.ALLOW,
                             actions=["secretsmanager:GetSecretValue"],
                             resources=[
-                                f"{self.config.secrets_arn}-*"  # Match secret with any suffix
+                                f"{self.config.secrets_arn}"  # Full ARN with suffix
                             ]
                         )
                     ]
@@ -154,12 +154,11 @@ class MCPStack(Stack):
         # Get environment variables from config (from .env file)
         env_vars = self.config.get_environment_variables()
 
-        # Load orchestrator secrets from AWS Secrets Manager
-        # Use partial ARN to match secret with any suffix (e.g., a207920-leon-skills-AbCdEf)
-        orchestrator_secret = secretsmanager.Secret.from_secret_partial_arn(
+        # Load orchestrator secrets from AWS Secrets Manager using full ARN
+        orchestrator_secret = secretsmanager.Secret.from_secret_complete_arn(
             self,
             "OrchestratorSecret",
-            secret_partial_arn=self.config.secrets_arn
+            secret_complete_arn=self.config.secrets_arn
         )
 
         # Create CloudWatch log group

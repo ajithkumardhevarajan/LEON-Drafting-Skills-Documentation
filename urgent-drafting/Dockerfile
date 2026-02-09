@@ -13,22 +13,24 @@ ARG JFROG_TOKEN
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files
+# Copy dependency files and source code (needed for pip install -e .)
 COPY pyproject.toml ./
 COPY uv.toml ./
+COPY src/ ./src/
+COPY run.py ./
 RUN touch README.md
 
 # Install dependencies with JFrog authentication (required for private packages)
-# Using pip instead of uv because uv has issues with authenticated package downloads
-# pip successfully authenticates to JFrog for both public and private packages
-RUN uv venv && \
-    . .venv/bin/activate && \
-    pip install --no-cache-dir -e . \
-    --index-url "https://${JFROG_USERNAME}:${JFROG_TOKEN}@tr1.jfrog.io/artifactory/api/pypi/pypi/simple"
-
-# Copy source code
-COPY src/ ./src/
-COPY run.py ./
+# Use PyPI for public packages (fastapi, etc.) and JFrog for private packages
+# --index-url: Primary index (PyPI)
+# --extra-index-url: Additional index for private packages (JFrog)
+# Use python3 -m venv instead of uv venv to get pip included
+RUN python3 -m venv .venv && \
+    /app/.venv/bin/pip install --no-cache-dir . \
+    --index-url https://pypi.org/simple \
+    --extra-index-url "https://${JFROG_USERNAME}:${JFROG_TOKEN}@tr1.jfrog.io/artifactory/api/pypi/pypi/simple" && \
+    echo "=== Installed packages ===" && \
+    /app/.venv/bin/pip list
 
 # Runtime stage - minimal image
 # Use AWS ECR Public Gallery to avoid Docker Hub rate limits
