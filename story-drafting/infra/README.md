@@ -1,10 +1,10 @@
-# Spot Story Infrastructure
+# Story Drafting Infrastructure
 
-AWS CDK infrastructure for deploying the spot-story MCP skill to ECS with Application Load Balancer.
+AWS CDK infrastructure for deploying the story-drafting MCP skill to ECS with Application Load Balancer.
 
 ## Overview
 
-This infrastructure deploys the spot-story skill as a containerized service on AWS ECS Fargate, fronted by an Application Load Balancer. It includes:
+This infrastructure deploys the story-drafting skill as a containerized service on AWS ECS Fargate, fronted by an Application Load Balancer. It includes:
 
 - **ECS Cluster & Service**: Runs the MCP server containers
 - **Application Load Balancer**: Distributes traffic to ECS tasks
@@ -144,10 +144,10 @@ Resources use the TR CDK naming pattern:
 - **Pattern**: `{prefix}{environment}-{service}-{resource-type}`
 
 Examples:
-- Cluster: `a207920-spx-dev-spot-story-cluster`
-- Service: `a207920-spx-dev-spot-story-service`
-- ALB: `a207920-spx-dev-spot-story-alb`
-- Task: `a207920-spx-dev-spot-story-task`
+- Cluster: `a207920-spx-dev-story-drafting-cluster`
+- Service: `a207920-spx-dev-story-drafting-service`
+- ALB: `a207920-spx-dev-story-drafting-alb`
+- Task: `a207920-spx-dev-story-drafting-task`
 
 ### Created Resources
 
@@ -156,12 +156,12 @@ Examples:
 3. **Fargate Task Definition**: Container specification
 4. **Application Load Balancer**: Traffic distribution
 5. **Target Group**: Health-checked ECS tasks
-6. **CloudWatch Log Group**: `/aws/ecs/a207920-spx-{env}-spot-story-service`
+6. **CloudWatch Log Group**: `/aws/ecs/a207920-spx-{env}-story-drafting-service`
 7. **IAM Roles**: Task execution and task roles
 8. **SSM Parameters**:
-   - `/a207920/spot-story/{env}/alb-dns`
-   - `/a207920/spot-story/{env}/service-url`
-   - `/a207920/spot-story/{env}/service-arn`
+   - `/a207920/story-drafting/{env}/alb-dns`
+   - `/a207920/story-drafting/{env}/service-url`
+   - `/a207920/story-drafting/{env}/service-arn`
 
 ## Secrets Management
 
@@ -187,17 +187,17 @@ These secrets are injected into ECS containers at runtime.
 
 ```bash
 # View logs via AWS CLI
-aws logs tail /aws/ecs/a207920-spx-dev-spot-story-service --follow
+aws logs tail /aws/ecs/a207920-spx-dev-story-drafting-service --follow
 
 # Or use AWS Console
-# CloudWatch > Log groups > /aws/ecs/a207920-spx-dev-spot-story-service
+# CloudWatch > Log groups > /aws/ecs/a207920-spx-dev-story-drafting-service
 ```
 
 ### Health Checks
 
 ```bash
 # Get ALB DNS name
-ALB_DNS=$(aws ssm get-parameter --name '/a207920/spot-story/dev/alb-dns' --query 'Parameter.Value' --output text)
+ALB_DNS=$(aws ssm get-parameter --name '/a207920/story-drafting/dev/alb-dns' --query 'Parameter.Value' --output text)
 
 # Check health endpoint
 curl http://$ALB_DNS/health
@@ -210,12 +210,12 @@ curl http://$ALB_DNS/ready
 
 ```bash
 # View service in AWS Console
-# ECS > Clusters > a207920-spx-dev-spot-story-cluster > Services
+# ECS > Clusters > a207920-spx-dev-story-drafting-cluster > Services
 
 # Or via AWS CLI
 aws ecs describe-services \
-  --cluster a207920-spx-dev-spot-story-cluster \
-  --services a207920-spx-dev-spot-story-service
+  --cluster a207920-spx-dev-story-drafting-cluster \
+  --services a207920-spx-dev-story-drafting-service
 ```
 
 ## Troubleshooting
@@ -231,7 +231,7 @@ echo $JFROG_TOKEN
 docker build --platform linux/arm64 \
   --build-arg JFROG_USERNAME="$JFROG_USERNAME" \
   --build-arg JFROG_TOKEN="$JFROG_TOKEN" \
-  --progress=plain -t spot-story-test .
+  --progress=plain -t story-drafting-test .
 ```
 
 ### CDK Deployment Fails
@@ -269,7 +269,7 @@ aws cloudformation describe-stacks --stack-name CDKToolkit
 
 # Manually delete ECR images if needed
 aws ecr batch-delete-image \
-  --repository-name a207920/spot-story-skill/dev \
+  --repository-name a207920/story-drafting-skill/dev \
   --image-ids imageTag=v0.1.5-a7f3b2c
 ```
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CDK App for deploying spot-story-mcp to AWS ECS using TR CDK Library.
+CDK App for deploying story-drafting-mcp to AWS ECS using TR CDK Library.
 """
 
 import os
@@ -50,7 +50,7 @@ def main():
     )
 
     # Create the MCP stack
-    # Stack name will be: a207920-spx-dev-spot-story-skill-euw1
+    # Stack name will be: a207920-spx-dev-story-drafting-skill-euw1
     # Format: {asset}-spx-{env}-{service}-skill-{region}
     construct_id = f"{config.environment}-{config.service_name}-skill"
     mcp_stack = MCPStack(

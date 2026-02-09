@@ -1,7 +1,7 @@
 [project]
-name = "spot-story-mcp"
+name = "story-drafting-mcp"
 version = "0.1.0"
-description = "Model Context Protocol (MCP) server for spot story capabilities"
+description = "Model Context Protocol (MCP) server for story drafting capabilities"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-spot-story-mcp = "src.main:main"
+story-drafting-mcp = "src.main:main"
 
 [build-system]
 requires = ["hatchling"]

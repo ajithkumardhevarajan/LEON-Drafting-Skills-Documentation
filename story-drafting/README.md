@@ -1,10 +1,10 @@
-# Spot Story Skill
+# Story Drafting Skill
 
-A Model Context Protocol (MCP) server providing spot story generation capabilities for the LEON assistant.
+A Model Context Protocol (MCP) server providing story drafting generation capabilities for the LEON assistant.
 
 ## Overview
 
-This skill provides a placeholder implementation for spot story generation. The infrastructure is fully deployable to AWS ECS with proper authentication and secrets management, while the business logic will be implemented in future iterations.
+This skill provides a placeholder implementation for story drafting generation. The infrastructure is fully deployable to AWS ECS with proper authentication and secrets management, while the business logic will be implemented in future iterations.
 
 ## Features
 
@@ -18,7 +18,7 @@ This skill provides a placeholder implementation for spot story generation. The 
 ## Architecture
 
 ```
-spot-story/
+story-drafting/
 ├── src/
 │   ├── main.py              # FastAPI MCP server
 │   ├── models.py            # MCP protocol models
@@ -75,7 +75,7 @@ cp .env.example .env
 python run.py
 
 # Or use the installed command
-spot-story-mcp
+story-drafting-mcp
 ```
 
 ### 4. Test the Server
@@ -139,10 +139,10 @@ cd infra
 
 ### `generate_spot_story`
 
-Placeholder tool for spot story generation.
+Placeholder tool for story drafting generation.
 
 **Parameters:**
-- `topic` (string, required): The topic or subject for the spot story
+- `topic` (string, required): The topic or subject for the story drafting
 - `context` (string, optional): Additional context or background information
 
 **Response:**
@@ -150,7 +150,7 @@ Returns a placeholder message indicating the tool is functional but business log
 
 ## Future Development
 
-This skill is designed to be enhanced with actual spot story generation logic:
+This skill is designed to be enhanced with actual story drafting generation logic:
 
 1. **Business Logic**: Implement actual story generation in `spot_story_service.py`
 2. **API Integration**: Add connections to Reuters APIs or other data sources

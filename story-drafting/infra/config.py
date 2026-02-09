@@ -1,5 +1,5 @@
 """
-Configuration for spot-story MCP deployment to AWS ECS.
+Configuration for story-drafting MCP deployment to AWS ECS.
 """
 
 import os
@@ -67,15 +67,15 @@ ENVIRONMENT_CONFIGS = {
 
 @dataclass
 class MCPConfig:
-    """Configuration for spot-story MCP deployment"""
+    """Configuration for story-drafting MCP deployment"""
 
     # Environment (required parameter)
     environment: str = "dev"  # Environment name (dev, qa, staging, prod)
 
     # Basic identifiers
-    mcp_name: str = "spot-story-skill"
-    service_name: str = "spot-story"  # Short name for TR CDK naming (avoid 64-char limit)
-    service_full_name_display: str = "spot-story"  # Full name for display/logs
+    mcp_name: str = "story-drafting-skill"
+    service_name: str = "story-draft"  # Short name for TR CDK naming (avoid 64-char limit)
+    service_full_name_display: str = "story-drafting"  # Full name for display/logs
 
     # AWS Configuration - dynamically set based on environment
     aws_account: str = field(init=False)
@@ -111,7 +111,7 @@ class MCPConfig:
 
     # Tags
     project_name: str = "sphinx"
-    service_full_name: str = "sphinx-spot-story-skill"
+    service_full_name: str = "sphinx-story-drafting-skill"
 
     def __post_init__(self):
         """Initialize environment-specific configuration after dataclass initialization"""
@@ -151,7 +151,7 @@ class MCPConfig:
         )
 
         # Set SSM parameter prefix with environment
-        self.ssm_parameter_prefix = f"/a207920/spot-story/{self.environment}"
+        self.ssm_parameter_prefix = f"/a207920/story-draft/{self.environment}"
 
     def get_stack_name(self) -> str:
         """Get the CDK stack name"""

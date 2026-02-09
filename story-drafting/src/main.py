@@ -1,8 +1,8 @@
 """
-Spot Story MCP Server
+Story Drafting MCP Server
 
 This is the main FastAPI server implementing the Model Context Protocol (MCP)
-for spot story capabilities. It handles JSON-RPC 2.0 requests from the
+for story drafting capabilities. It handles JSON-RPC 2.0 requests from the
 backend and routes them to appropriate handlers.
 
 Key endpoints:
@@ -38,21 +38,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class SpotStoryMCPServer:
+class StoryDraftingMCPServer:
     """
     MCP Server implementing the Model Context Protocol over HTTP.
 
     This server:
     - Handles MCP JSON-RPC 2.0 protocol
-    - Provides spot story generation tools
+    - Provides story drafting tools
     - Includes health check endpoints
     - Supports CORS for cross-origin requests
     """
 
     def __init__(self):
         self.app = FastAPI(
-            title="Spot Story MCP Server",
-            description="Model Context Protocol server for spot story capabilities",
+            title="Story Drafting MCP Server",
+            description="Model Context Protocol server for story drafting capabilities",
             version="0.1.0",
         )
         self.start_time = time.time()
@@ -61,7 +61,7 @@ class SpotStoryMCPServer:
         self._setup_middleware()
         self._setup_routes()
 
-        logger.info("Spot Story MCP Server initialized")
+        logger.info("Story Drafting MCP Server initialized")
 
     def _setup_middleware(self):
         """Configure CORS middleware for cross-origin requests."""
@@ -136,7 +136,7 @@ class SpotStoryMCPServer:
             health = HealthResponse(
                 status="healthy",
                 uptime_seconds=uptime,
-                server_name="Spot Story MCP",
+                server_name="Story Drafting MCP",
                 version="0.1.0",
             )
             return JSONResponse(content=health.model_dump())
@@ -170,7 +170,7 @@ class SpotStoryMCPServer:
         response = InitializeResponse(
             protocolVersion="2024-11-05",
             capabilities=ServerCapabilities(
-                tools={},  # We support spot story tools
+                tools={},  # We support story drafting tools
                 resources={},  # No resources in this server
                 prompts={},  # No prompts in this server
             ),
@@ -302,10 +302,10 @@ def main():
     port = int(os.getenv("MCP_PORT", "8000"))
 
     # Create server instance
-    server = SpotStoryMCPServer()
+    server = StoryDraftingMCPServer()
 
     # Log startup
-    logger.info(f"Starting Spot Story MCP Server on {host}:{port}")
+    logger.info(f"Starting Story Drafting MCP Server on {host}:{port}")
 
     # Run server
     uvicorn.run(server.app, host=host, port=port, log_level="info")
