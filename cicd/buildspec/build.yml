@@ -37,7 +37,7 @@ phases:
         export JFROG_TOKEN
         echo "JFrog credentials loaded: username=${JFROG_USERNAME:0:3}***"
 
-        cd $SKILL_PATH/infra
+        cd $CODEBUILD_SRC_DIR/$SKILL_PATH/infra
         chmod +x deploy.sh
 
         # Compute version once and reuse for both build and push
@@ -56,7 +56,8 @@ phases:
 
       # Get the most recently pushed image tag from ECR (dynamically from skill config)
       - |
-        cd $SKILL_PATH/infra
+        cd $CODEBUILD_SRC_DIR/$SKILL_PATH/infra
+        export DEPLOYMENT_ENV=$ENVIRONMENT
         ECR_REPO=$(python3 -c "from config import CONFIG; print(CONFIG.ecr_repository_name)")
         echo "Using ECR repository: $ECR_REPO"
         IMAGE_TAG=$(aws ecr describe-images \
