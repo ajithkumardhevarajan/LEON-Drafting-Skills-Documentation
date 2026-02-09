@@ -54,9 +54,11 @@ phases:
         echo "Pushing Docker image to ECR..."
         ./deploy.sh push $ENVIRONMENT $IMAGE_TAG
 
-      # Get the most recently pushed image tag from ECR
+      # Get the most recently pushed image tag from ECR (dynamically from skill config)
       - |
-        ECR_REPO="a207920/urgent-drafting-skill/$ENVIRONMENT"
+        cd $SKILL_PATH/infra
+        ECR_REPO=$(python3 -c "from config import CONFIG; print(CONFIG.ecr_repository_name)")
+        echo "Using ECR repository: $ECR_REPO"
         IMAGE_TAG=$(aws ecr describe-images \
           --repository-name "$ECR_REPO" \
           --region $AWS_DEFAULT_REGION \
