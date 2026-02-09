@@ -19,12 +19,12 @@ COPY uv.toml ./
 RUN touch README.md
 
 # Install dependencies with JFrog authentication (required for private packages)
-# uv.toml already configures the JFrog URL, we just inject credentials via env vars
-# uv will automatically add credentials to the URL from uv.toml
+# Using pip instead of uv because uv has issues with authenticated package downloads
+# pip successfully authenticates to JFrog for both public and private packages
 RUN uv venv && \
-    UV_INDEX_pypi_USERNAME="${JFROG_USERNAME}" \
-    UV_INDEX_pypi_PASSWORD="${JFROG_TOKEN}" \
-    uv pip install -e .
+    . .venv/bin/activate && \
+    pip install --no-cache-dir -e . \
+    --index-url "https://${JFROG_USERNAME}:${JFROG_TOKEN}@tr1.jfrog.io/artifactory/api/pypi/pypi/simple"
 
 # Copy source code
 COPY src/ ./src/
