@@ -17,15 +17,6 @@ phases:
       - source $HOME/.local/bin/env
       - uv --version
 
-      # Configure JFrog credentials for Docker build (same as deploy.yml)
-      - echo "Fetching JFrog credentials from SSM Parameter Store..."
-      - |
-        JFROG_USERNAME=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/username" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
-        JFROG_TOKEN=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/token" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
-        export JFROG_USERNAME
-        export JFROG_TOKEN
-        echo "JFrog credentials loaded: username=${JFROG_USERNAME:0:3}***"
-
   pre_build:
     commands:
       - echo "Starting build phase for $SKILL_PATH in $ENVIRONMENT environment"
@@ -36,8 +27,16 @@ phases:
       - echo "Building and pushing Docker image using deploy.sh..."
       - source $HOME/.local/bin/env || export PATH="$HOME/.local/bin:$PATH"
 
-      # JFrog credentials were loaded in install phase - use them here
+      # Fetch JFrog credentials and build in SAME command block (env vars must be in same shell)
       - |
+        # Fetch JFrog credentials from SSM (same approach as deploy.yml)
+        echo "Fetching JFrog credentials from SSM Parameter Store..."
+        JFROG_USERNAME=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/username" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
+        JFROG_TOKEN=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/token" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
+        export JFROG_USERNAME
+        export JFROG_TOKEN
+        echo "JFrog credentials loaded: username=${JFROG_USERNAME:0:3}***"
+
         cd $SKILL_PATH/infra
         chmod +x deploy.sh
 
