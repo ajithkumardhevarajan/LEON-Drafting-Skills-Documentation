@@ -90,6 +90,7 @@ class MCPStack(Stack):
         """Create IAM roles for ECS tasks"""
         # Task execution role (for pulling images, writing logs, and reading secrets)
         # Note: Not specifying role_name - let TR CDK auto-generate to avoid 64-char limit
+        # Inline policy is defined here to ensure it's included in CloudFormation template
         execution_role = iam.Role(
             self,
             "ExecutionRole",
@@ -99,18 +100,19 @@ class MCPStack(Stack):
                     "service-role/AmazonECSTaskExecutionRolePolicy"
                 )
             ],
-        )
-
-        # Grant Secrets Manager access to execution role
-        # This allows ECS to read secrets at container startup
-        # Pattern: arn:aws:secretsmanager:region:account:secret:name-* matches any suffix
-        execution_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["secretsmanager:GetSecretValue"],
-                resources=[
-                    f"{self.config.secrets_arn}-*"  # Match any secret with this name prefix
-                ],
-            )
+            inline_policies={
+                "SecretsManagerAccess": iam.PolicyDocument(
+                    statements=[
+                        iam.PolicyStatement(
+                            effect=iam.Effect.ALLOW,
+                            actions=["secretsmanager:GetSecretValue"],
+                            resources=[
+                                f"{self.config.secrets_arn}-*"  # Match secret with any suffix
+                            ]
+                        )
+                    ]
+                )
+            }
         )
 
         # Task role (for application permissions)
