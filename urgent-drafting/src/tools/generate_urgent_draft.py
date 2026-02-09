@@ -232,7 +232,7 @@ class GenerateUrgentDraftTool(BaseTool):
 
             elif action == ACTION_CANCEL:
                 logger.info("User cancelled the workflow")
-                return self._error_response("Cancelled by user", is_error=False)
+                return self._error_response("Urgent drafting cancelled by user", is_error=False)
 
             else:
                 # Unknown action - treat as refinement request

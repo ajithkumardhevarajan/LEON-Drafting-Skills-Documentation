@@ -2,8 +2,13 @@
 
 import json
 import logging
-import re
-from typing import Dict, Any, List
+from typing import Dict, Any
+
+from ..prompts.intent_interpreter_prompts import (
+    get_review_response_prompt,
+    get_refinement_instructions_prompt
+)
+from .intent_models import ReviewResponse, RefinementInstructions
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +27,11 @@ class IntentInterpreter:
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Interpret user's response to urgent review.
+        Interpret user's response to urgent review using structured outputs.
+
+        Note: Asset selection is handled by the UI component, which sends
+        back a sorted array in the user's desired order. This method only
+        interprets the action (approve/regenerate/refine/cancel).
 
         Args:
             user_response: User's response (string, dict, or other)
@@ -31,7 +40,6 @@ class IntentInterpreter:
         Returns:
             Dict with:
             - action: "approve" | "regenerate" | "refine" | "cancel"
-            - assets: Updated asset array if user wants to change selection
             - instructions: Refinement instructions if action is refine
         """
 
@@ -45,149 +53,102 @@ class IntentInterpreter:
             try:
                 parsed = json.loads(user_response)
                 if isinstance(parsed, dict) and 'action' in parsed:
-                    logger.info(f"Parsed JSON response: {parsed.get('action')}, has assets: {'assets' in parsed}")
+                    logger.info(f"Parsed JSON response: {parsed.get('action')}")
                     return parsed
             except (json.JSONDecodeError, ValueError):
-                pass  # Not JSON, continue to keyword fallback
+                pass  # Not JSON, continue to LLM interpretation
 
-        # For now, rely on structured button responses from UI
-        # Natural language interpretation is commented out for simpler debugging
+        # Use LLM structured output for natural language interpretation
         response_text = str(user_response)
-        logger.info(f"Received non-dict response (fallback): {response_text[:100]}")
+        logger.info(f"Interpreting natural language response: {response_text[:100]}")
 
-        # # LLM interpretation - COMMENTED OUT
-        # assets = context.get("assets", [])
-        # logger.info(f"Interpreting natural language response: {response_text[:100]}...")
-        #
-        # # Build interpretation prompt
-        # interpretation_prompt = f"""
-        # You are interpreting user feedback on a generated urgent news draft with {len(assets)} source news flashes.
-        #
-        # User response: "{response_text}"
-        #
-        # Determine the user's intent:
-        #
-        # 1. Action (required):
-        #    - "approve": User is satisfied (e.g., "looks good", "perfect", "approve", "ok", "ship it", "great", "fine")
-        #    - "regenerate": User wants a new version (e.g., "try again", "regenerate", "redo", "different version")
-        #    - "refine": User wants specific edits (e.g., "make it shorter", "change X to Y", "add more detail")
-        #    - "cancel": User wants to stop (e.g., "cancel", "stop", "abort", "nevermind")
-        #
-        # 2. Asset changes (only for regenerate):
-        #    - If user mentions excluding/including specific news flashes (numbered 1 to {len(assets)})
-        #    - Examples: "without 3", "exclude 2 and 4", "only use 1", "skip the last one", "just flash 2"
-        #    - Parse numbers and determine which should be included/excluded
-        #
-        # 3. Instructions (only for refine):
-        #    - The specific changes requested by the user
-        #
-        # Return ONLY valid JSON:
-        # {{
-        #     "action": "approve|regenerate|refine|cancel",
-        #     "asset_changes": {{  // Only if changing selection for regenerate
-        #         "exclude": [2, 4],  // Asset numbers to exclude
-        #         "only": [1, 3]     // If user said "only use", list of assets to include
-        #     }},
-        #     "instructions": "refinement instructions if action is refine"
-        # }}
-        # """
-        #
-        # try:
-        #     result = await self.llm.invoke(
-        #         [{"role": "system", "content": interpretation_prompt}],
-        #         temperature=0,
-        #         model="gpt-4o"  # Use faster model for intent classification
-        #     )
-        #
-        #     interpreted = json.loads(result)
-        #     logger.info(f"Interpreted intent: {interpreted.get('action')}")
-        #
-        #     # Process asset changes if present
-        #     if interpreted.get("asset_changes") and assets:
-        #         asset_changes = interpreted["asset_changes"]
-        #         updated_assets = []
-        #
-        #         # Determine which assets to include
-        #         if asset_changes.get("only"):
-        #             # User said "only use X" - include only those
-        #             only_numbers = set(asset_changes["only"])
-        #             for i, asset in enumerate(assets, 1):
-        #                 asset_dict = asset.dict() if hasattr(asset, 'dict') else asset
-        #                 asset_dict["included"] = i in only_numbers
-        #                 updated_assets.append(asset_dict)
-        #         elif asset_changes.get("exclude"):
-        #             # User said "exclude X" - exclude those
-        #             exclude_numbers = set(asset_changes["exclude"])
-        #             for i, asset in enumerate(assets, 1):
-        #                 asset_dict = asset.dict() if hasattr(asset, 'dict') else asset
-        #                 asset_dict["included"] = i not in exclude_numbers
-        #                 updated_assets.append(asset_dict)
-        #
-        #         if updated_assets:
-        #             interpreted["assets"] = updated_assets
-        #             logger.info(f"Updated {len([a for a in updated_assets if a['included']])} assets included")
-        #
-        #     return interpreted
-        #
-        # except Exception as e:
-        #     logger.error(f"Failed to interpret with LLM, using fallback: {e}")
+        # Build interpretation prompt
+        interpretation_prompt = get_review_response_prompt(response_text)
 
-        # Simple keyword-based fallback for non-structured responses
-        response_lower = response_text.lower()
+        # Call LLM with structured output - guaranteed valid schema!
+        try:
+            result: ReviewResponse = await self.llm.invoke_structured(
+                messages=[{"role": "system", "content": interpretation_prompt}],
+                response_model=ReviewResponse,
+                model="gpt-4-1",
+                temperature=0
+            )
 
-        if any(w in response_lower for w in ["approve", "good", "perfect", "yes", "ok", "great", "fine", "ship"]):
-            return {"action": "approve"}
-        elif any(w in response_lower for w in ["cancel", "stop", "abort", "nevermind"]):
-            return {"action": "cancel"}
-        elif any(w in response_lower for w in ["regenerate", "again", "redo", "retry", "different"]):
-            # Check for asset exclusions in natural language
-            exclude_pattern = r"without (\d+)|exclude (\d+)|skip (\d+)|remove (\d+)"
-            matches = re.findall(exclude_pattern, response_lower)
-            if matches:
-                # Flatten and filter matches
-                excluded_nums = [int(m) for group in matches for m in group if m]
-                return {"action": "regenerate", "exclude_assets": excluded_nums}
-            return {"action": "regenerate"}
-        else:
-            # Default to refine with full text as instructions
-            return {"action": "refine", "instructions": response_text}
+            logger.info(f"Interpreted intent: {result.action}")
+
+            # Convert Pydantic model to dict for backwards compatibility
+            interpreted = {"action": result.action}
+
+            # Add instructions if present (for refine action)
+            if result.instructions:
+                interpreted["instructions"] = result.instructions
+
+            return interpreted
+
+        except Exception as e:
+            logger.error(f"Failed to interpret review response: {e}", exc_info=True)
+            raise RuntimeError(f"Failed to interpret user response: {response_text[:100]}...") from e
 
     async def interpret_refinement_instructions(
         self,
         user_response: Any
     ) -> Dict[str, Any]:
         """
-        Extract clear refinement instructions from user response
+        Extract clear, actionable refinement instructions using structured outputs.
 
         Args:
-            user_response: User's response
+            user_response: User's response (string, dict, or other)
 
         Returns:
             Dict with:
-            - instructions: Clear refinement instructions
+            - instructions: Clear, actionable refinement instructions
             - target: "headline" | "body" | "both"
+            - change_type: Category of change (optional)
+            - specific_changes: Detailed list of changes if identifiable (optional)
         """
 
+        # Handle structured responses
         if isinstance(user_response, dict):
+            logger.info(f"Received structured refinement: target={user_response.get('target')}")
             return user_response
 
         response_text = str(user_response)
+        logger.info(f"Interpreting refinement instructions: {response_text[:100]}")
 
-        # Determine target
-        target = "both"
-        response_lower = response_text.lower()
-        if "headline" in response_lower and "body" not in response_lower:
-            target = "headline"
-        elif "body" in response_lower or "text" in response_lower or "paragraph" in response_lower:
-            if "headline" not in response_lower:
-                target = "body"
+        # Build refinement interpretation prompt
+        interpretation_prompt = get_refinement_instructions_prompt(response_text)
 
-        logger.info(f"Refinement target: {target}")
+        # Call LLM with structured output - guaranteed valid schema!
+        try:
+            result: RefinementInstructions = await self.llm.invoke_structured(
+                messages=[{"role": "system", "content": interpretation_prompt}],
+                response_model=RefinementInstructions,
+                model="gpt-4-1",
+                temperature=0
+            )
 
-        return {
-            "instructions": response_text,
-            "target": target
-        }
+            logger.info(
+                f"Interpreted refinement: target={result.target}, "
+                f"type={result.change_type}, "
+                f"specific_changes={len(result.specific_changes) if result.specific_changes else 0}"
+            )
+
+            # Convert Pydantic model to dict for backwards compatibility
+            interpreted = {
+                "target": result.target,
+                "change_type": result.change_type,
+                "instructions": result.instructions
+            }
+
+            # Add optional fields if present
+            if result.specific_changes:
+                interpreted["specific_changes"] = result.specific_changes
+
+            return interpreted
+
+        except Exception as e:
+            logger.error(f"Failed to interpret refinement instructions: {e}", exc_info=True)
+            raise RuntimeError(f"Failed to interpret refinement instructions: {response_text[:100]}...") from e
 
 
 # Global singleton

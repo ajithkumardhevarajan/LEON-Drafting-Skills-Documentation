@@ -1,11 +1,14 @@
 """LLM Orchestrator Service for Azure OpenAI"""
 
 from openai import AzureOpenAI
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Type, TypeVar
+from pydantic import BaseModel
 import logging
 from ..config.llm_config import get_llm_config, LLMConfig
 from ..config.model_constants import is_mini_model, Models
 from ..utils.azure_token_util import generate_azure_token, AzureTokenConfig
+
+T = TypeVar('T', bound=BaseModel)
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +237,105 @@ class LLMOrchestrator:
         except Exception as e:
             logger.error(
                 f"LLM invocation failed: model={model}, error={str(e)}",
+                exc_info=True
+            )
+            raise
+
+    async def invoke_structured(
+        self,
+        messages: List[Dict[str, str]],
+        response_model: Type[T],
+        model: str = "gpt-4o",
+        temperature: float = 0.05,
+        max_tokens: Optional[int] = None
+    ) -> T:
+        """
+        Invoke LLM with structured output using Pydantic model schema
+
+        This method uses OpenAI's structured output feature to guarantee
+        the response matches the provided Pydantic model schema. This is
+        much more reliable than asking the LLM to return JSON text.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            response_model: Pydantic model class defining the response structure
+            model: Model to use (default "gpt-4o" - structured outputs require compatible models)
+            temperature: Sampling temperature (0-1)
+            max_tokens: Maximum tokens in response
+
+        Returns:
+            Parsed Pydantic model instance with guaranteed schema compliance
+
+        Raises:
+            RuntimeError: If LLM call fails or response cannot be parsed
+
+        Example:
+            ```python
+            class Answer(BaseModel):
+                action: Literal["yes", "no"]
+                reason: str
+
+            result = await llm.invoke_structured(
+                messages=[{"role": "user", "content": "Is the sky blue?"}],
+                response_model=Answer
+            )
+            print(result.action)  # "yes"
+            print(result.reason)  # "The sky appears blue due to..."
+            ```
+        """
+        try:
+            # Initialize client with model-specific configuration
+            client = await self._initialize_client(model)
+
+            # Get deployment and model name
+            deployment = self._get_deployment(model)
+            model_name = self._get_model_name(model)
+
+            # Handle mini models: convert system messages to user messages
+            formatted_messages = messages
+            if self._is_mini_model(model):
+                formatted_messages = [
+                    {"role": "user", "content": msg["content"]} if msg["role"] == "system" else msg
+                    for msg in messages
+                ]
+                logger.debug(
+                    f"Converted system messages to user messages for mini model {model}"
+                )
+
+            logger.info(
+                f"LLM Structured Request: model={model}, deployment={deployment}, "
+                f"response_model={response_model.__name__}, messages={len(formatted_messages)}, "
+                f"temp={temperature}, uses_orchestrator={self._uses_orchestrator()}"
+            )
+
+            # Make the API call with structured output
+            completion = client.beta.chat.completions.parse(
+                model=deployment,
+                messages=formatted_messages,
+                response_format=response_model,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+            # Extract parsed response
+            parsed_response = completion.choices[0].message.parsed
+
+            if parsed_response is None:
+                raise RuntimeError(
+                    f"LLM returned null parsed response. Refusal: {completion.choices[0].message.refusal}"
+                )
+
+            logger.info(
+                f"LLM Structured Response: model={response_model.__name__}, "
+                f"tokens={completion.usage.total_tokens if completion.usage else 'N/A'}"
+            )
+
+            return parsed_response
+
+        except Exception as e:
+            logger.error(
+                f"LLM structured invocation failed: model={model}, "
+                f"response_model={response_model.__name__}, error={str(e)}",
                 exc_info=True
             )
             raise
