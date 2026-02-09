@@ -144,6 +144,7 @@ class MCPConfig:
         self.ecr_repository_name = f"{self.resource_prefix}/{self.mcp_name}/{self.environment}"
 
         # Set Secrets Manager ARN dynamically based on account and region
+        # Partial ARN without the 6-character suffix (will be matched with wildcard)
         self.secrets_arn = (
             f"arn:aws:secretsmanager:{self.aws_region}:{self.aws_account}:"
             f"secret:{self.resource_prefix}-leon-skills"

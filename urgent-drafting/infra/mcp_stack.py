@@ -103,11 +103,12 @@ class MCPStack(Stack):
 
         # Grant Secrets Manager access to execution role
         # This allows ECS to read secrets at container startup
+        # Pattern: arn:aws:secretsmanager:region:account:secret:name-* matches any suffix
         execution_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["secretsmanager:GetSecretValue"],
                 resources=[
-                    f"{self.config.secrets_arn}*"  # Allow access to versioned secrets
+                    f"{self.config.secrets_arn}-*"  # Match any secret with this name prefix
                 ],
             )
         )
@@ -152,10 +153,11 @@ class MCPStack(Stack):
         env_vars = self.config.get_environment_variables()
 
         # Load orchestrator secrets from AWS Secrets Manager
-        orchestrator_secret = secretsmanager.Secret.from_secret_complete_arn(
+        # Use partial ARN to match secret with any suffix (e.g., a207920-leon-skills-AbCdEf)
+        orchestrator_secret = secretsmanager.Secret.from_secret_partial_arn(
             self,
             "OrchestratorSecret",
-            secret_complete_arn=self.config.secrets_arn
+            secret_partial_arn=self.config.secrets_arn
         )
 
         # Create CloudWatch log group
