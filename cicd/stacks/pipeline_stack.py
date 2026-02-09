@@ -214,6 +214,21 @@ class SkillPipelineStack(Stack):
             )
         )
 
+        # Add SSM permissions for JFrog credentials
+        build_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ssm:GetParameter",
+                    "ssm:GetParameters",
+                ],
+                resources=[
+                    f"arn:aws:ssm:{self.region}:{self.account}:parameter/a207920/leon-skills/jfrog/username",
+                    f"arn:aws:ssm:{self.region}:{self.account}:parameter/a207920/leon-skills/jfrog/token",
+                ],
+            )
+        )
+
         return codebuild.PipelineProject(
             self,
             "BuildProject",
