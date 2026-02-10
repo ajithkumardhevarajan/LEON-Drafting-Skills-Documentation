@@ -233,6 +233,7 @@ class MCPStack(Stack):
             load_balancer_name=self.config.get_resource_name("alb"),
             vpc=StackContextAccessor.tr_context(self).vpc,
             internet_facing=self.config.public_load_balancer,
+            idle_timeout=Duration.seconds(300),  # 5 minutes for long-running LLM calls
         )
         return alb
 
