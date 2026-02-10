@@ -16,10 +16,14 @@ logger = logging.getLogger(__name__)
 class IntentInterpreter:
     """Interprets user's natural language responses using LLM"""
 
-    def __init__(self):
-        # Import here to avoid circular dependency
-        from .llm_orchestrator import get_llm_orchestrator
-        self.llm = get_llm_orchestrator()
+    def __init__(self, llm_orchestrator):
+        """
+        Initialize intent interpreter with LLM orchestrator.
+
+        Args:
+            llm_orchestrator: LLMOrchestrator instance for LLM calls
+        """
+        self.llm = llm_orchestrator
 
     async def interpret_review_response(
         self,
@@ -149,15 +153,3 @@ class IntentInterpreter:
         except Exception as e:
             logger.error(f"Failed to interpret refinement instructions: {e}", exc_info=True)
             raise RuntimeError(f"Failed to interpret refinement instructions: {response_text[:100]}...") from e
-
-
-# Global singleton
-_intent_interpreter = None
-
-
-def get_intent_interpreter() -> IntentInterpreter:
-    """Get global intent interpreter instance"""
-    global _intent_interpreter
-    if _intent_interpreter is None:
-        _intent_interpreter = IntentInterpreter()
-    return _intent_interpreter

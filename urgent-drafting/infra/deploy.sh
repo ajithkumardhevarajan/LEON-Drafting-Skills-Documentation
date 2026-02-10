@@ -264,7 +264,12 @@ create_ecr_repo() {
 # Function to build Docker image
 build_image() {
     echo -e "\n${BLUE}Building Docker image...${NC}"
-    cd "$MCP_ROOT"
+
+    # Get repository root (parent of MCP_ROOT)
+    REPO_ROOT="$(dirname "$MCP_ROOT")"
+    SKILL_NAME="$(basename "$MCP_ROOT")"
+
+    cd "$REPO_ROOT"
 
     # Pass JFrog credentials as build args (required for private packages)
     if [[ -z "${JFROG_USERNAME:-}" || -z "${JFROG_TOKEN:-}" ]]; then
@@ -286,6 +291,7 @@ build_image() {
     echo -e "  Username: ${JFROG_USERNAME:0:3}*** (${#JFROG_USERNAME} chars)"
     echo -e "  Token: *** (${#JFROG_TOKEN} chars)"
     docker build --platform linux/arm64 \
+        --file "$SKILL_NAME/Dockerfile" \
         --build-arg JFROG_USERNAME="$JFROG_USERNAME" \
         --build-arg JFROG_TOKEN="$JFROG_TOKEN" \
         -t "$ECR_REPO:$IMAGE_TAG" .

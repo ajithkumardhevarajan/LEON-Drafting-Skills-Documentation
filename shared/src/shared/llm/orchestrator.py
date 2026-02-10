@@ -4,9 +4,9 @@ from openai import AzureOpenAI
 from typing import List, Dict, Optional, Type, TypeVar
 from pydantic import BaseModel
 import logging
-from ..config.llm_config import get_llm_config, LLMConfig
-from ..config.model_constants import is_mini_model, Models
-from ..utils.azure_token_util import generate_azure_token, AzureTokenConfig
+from .config import LLMConfig
+from .constants import is_mini_model, Models
+from .azure_token import generate_azure_token, AzureTokenConfig
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -16,14 +16,14 @@ logger = logging.getLogger(__name__)
 class LLMOrchestrator:
     """Azure OpenAI client for urgent drafting with LLM orchestration"""
 
-    def __init__(self, config: Optional[LLMConfig] = None):
+    def __init__(self, config: LLMConfig):
         """
         Initialize LLM Orchestrator
 
         Args:
-            config: Optional LLM configuration. If None, loads from environment.
+            config: LLM configuration with Azure OpenAI settings
         """
-        self.config = config or get_llm_config()
+        self.config = config
         self._client = None
 
     def _uses_orchestrator(self) -> bool:
@@ -339,15 +339,3 @@ class LLMOrchestrator:
                 exc_info=True
             )
             raise
-
-
-# Global singleton instance
-_llm_orchestrator = None
-
-
-def get_llm_orchestrator() -> LLMOrchestrator:
-    """Get global LLM orchestrator instance"""
-    global _llm_orchestrator
-    if _llm_orchestrator is None:
-        _llm_orchestrator = LLMOrchestrator()
-    return _llm_orchestrator

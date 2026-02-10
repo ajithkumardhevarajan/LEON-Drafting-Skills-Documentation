@@ -12,8 +12,9 @@ import logging
 
 from .base import BaseTool
 from ..models import ToolResult
-from ..services.llm_orchestrator import get_llm_orchestrator
-from ..services.intent_interpreter import get_intent_interpreter
+from shared.llm import LLMOrchestratorFactory
+from ..config.llm_skill_config import load_llm_config
+from ..services.intent_interpreter import IntentInterpreter
 from .urgent_helpers import format_urgent_sources
 from .urgent_actions import (
     generate_urgent_content,
@@ -114,8 +115,9 @@ class GenerateUrgentDraftTool(BaseTool):
         CRITICAL: Every change (generate/regenerate/refine) MUST be followed by review.
         """
         # Initialize services
-        llm = get_llm_orchestrator()
-        interpreter = get_intent_interpreter()
+        llm_config = load_llm_config()
+        llm = LLMOrchestratorFactory.create(llm_config)
+        interpreter = IntentInterpreter(llm)
 
         # Validate input
         usn = arguments.get("usn")

@@ -3,51 +3,63 @@
 # Build: docker build --platform linux/arm64 -t urgent-drafting-mcp .
 # Run:   docker run -p 8000:8000 urgent-drafting-mcp
 
-# Builder stage - use uv for dependency management
+# ===== Builder stage: Build wheels for all dependencies =====
 FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim as builder
 
 # Accept JFrog credentials as build arguments (for private packages)
 ARG JFROG_USERNAME
 ARG JFROG_TOKEN
 
-# Set working directory
-WORKDIR /app
+WORKDIR /build
 
-# Copy dependency files and source code (needed for pip install -e .)
-COPY pyproject.toml ./
-COPY uv.toml ./
-COPY src/ ./src/
-COPY run.py ./
-RUN touch README.md
+# Install build dependencies
+RUN python3 -m venv /build/venv && \
+    /build/venv/bin/pip install --no-cache-dir --upgrade pip wheel setuptools build
 
-# Install dependencies with JFrog authentication (required for private packages)
-# Use PyPI for public packages (fastapi, etc.) and JFrog for private packages
-# --index-url: Primary index (PyPI)
-# --extra-index-url: Additional index for private packages (JFrog)
-# Use python3 -m venv instead of uv venv to get pip included
-RUN python3 -m venv .venv && \
-    /app/.venv/bin/pip install --no-cache-dir . \
+# Copy and build shared package as wheel
+COPY shared/ /build/shared/
+RUN cd /build/shared && \
+    /build/venv/bin/python -m build --wheel --outdir /build/wheels && \
+    echo "=== Built shared package wheel ===" && \
+    ls -lh /build/wheels/
+
+# Copy skill files (needed to build the skill itself)
+COPY urgent-drafting/ /build/skill/
+WORKDIR /build/skill
+
+# Build wheels for all skill dependencies (including JFrog private packages)
+# Note: Dependencies reference sphinx-shared which is already in wheels dir
+RUN /build/venv/bin/pip wheel --wheel-dir /build/wheels --no-cache-dir \
+    --find-links /build/wheels \
     --index-url https://pypi.org/simple \
-    --extra-index-url "https://${JFROG_USERNAME}:${JFROG_TOKEN}@tr1.jfrog.io/artifactory/api/pypi/pypi/simple" && \
-    echo "=== Installed packages ===" && \
-    /app/.venv/bin/pip list
+    --extra-index-url "https://${JFROG_USERNAME}:${JFROG_TOKEN}@tr1.jfrog.io/artifactory/api/pypi/pypi/simple" \
+    . && \
+    echo "=== Built all wheels ===" && \
+    ls -lh /build/wheels/
 
-# Runtime stage - minimal image
-# Use AWS ECR Public Gallery to avoid Docker Hub rate limits
+# ===== Runtime stage: Minimal image with only runtime dependencies =====
 FROM public.ecr.aws/docker/library/python:3.11-slim-bookworm
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/venv/bin:$PATH"
 
-# Set working directory
 WORKDIR /app
 
-# Copy virtual environment and application from builder
-COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/src /app/src
-COPY --from=builder /app/run.py /app/run.py
+# Create virtual environment and install from pre-built wheels
+RUN python3 -m venv /app/venv
+
+# Copy wheels from builder and install (fast, no build deps needed)
+COPY --from=builder /build/wheels /tmp/wheels
+RUN /app/venv/bin/pip install --no-cache-dir /tmp/wheels/*.whl && \
+    rm -rf /tmp/wheels && \
+    echo "=== Installed packages ===" && \
+    /app/venv/bin/pip list
+
+# Copy application code (done last for better layer caching)
+COPY urgent-drafting/src/ ./src/
+COPY urgent-drafting/run.py ./
 
 # Expose port (default 8000, override with MCP_PORT env var)
 EXPOSE 8000
