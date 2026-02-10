@@ -264,7 +264,10 @@ create_ecr_repo() {
 # Function to build Docker image
 build_image() {
     echo -e "\n${BLUE}Building Docker image...${NC}"
-    cd "$MCP_ROOT"
+
+    # Build from repository root (parent of MCP_ROOT) so Dockerfile can access both shared/ and story-drafting/
+    REPO_ROOT="$(dirname "$MCP_ROOT")"
+    cd "$REPO_ROOT"
 
     # Pass JFrog credentials as build args (required for private packages)
     if [[ -z "${JFROG_USERNAME:-}" || -z "${JFROG_TOKEN:-}" ]]; then
@@ -288,6 +291,7 @@ build_image() {
     docker build --platform linux/arm64 \
         --build-arg JFROG_USERNAME="$JFROG_USERNAME" \
         --build-arg JFROG_TOKEN="$JFROG_TOKEN" \
+        -f story-drafting/Dockerfile \
         -t "$ECR_REPO:$IMAGE_TAG" .
     if [[ $? -eq 0 ]]; then
         echo -e "${GREEN}✓ Image built successfully${NC}"
