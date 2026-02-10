@@ -75,6 +75,36 @@ class UpdateSpotStoryTool(BaseTool):
     def response_mode(self) -> str:
         return "direct"
 
+    @property
+    def orchestration_hints(self) -> Dict[str, Any]:
+        """
+        Fast-path routing hints to bypass LLM tool selection.
+
+        When user input matches these patterns (especially with USN),
+        route directly to this tool without LLM decision - saves ~1-2s latency.
+        """
+        return {
+            "enabled": True,
+            "priority": 5,
+            "query_patterns": [
+                # Case-insensitive patterns - USN format: alphanumeric 6-12 chars
+                r"(?:update|rewrite)\s+(?:the\s+)?story\s+[A-Z0-9]{6,12}",
+                r"(?:update|rewrite)\s+(?:the\s+)?USN\s+[A-Z0-9]{6,12}",
+                r"(?:add|include)\s+(?:new\s+)?(?:info|information|background)\s+(?:to\s+)?(?:story\s+)?[A-Z0-9]{6,12}",
+                r"[A-Z0-9]{6,12}\s+(?:update|rewrite|add)",
+            ],
+            "parameter_extractions": [
+                {
+                    "parameter_name": "request",
+                    "jsonpath": None,
+                    "fallback": "user_query",
+                    "required": True,
+                    "default": None
+                }
+            ],
+            "description": "Handles spot story update requests with USN"
+        }
+
     def _error_response(self, message: str, is_error: bool = True) -> ToolResult:
         """Create a consistent error/info response."""
         return ToolResult(

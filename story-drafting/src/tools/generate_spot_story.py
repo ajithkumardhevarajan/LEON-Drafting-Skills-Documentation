@@ -73,6 +73,35 @@ class GenerateSpotStoryTool(BaseTool):
     def response_mode(self) -> str:
         return "direct"  # Return direct response without orchestrator interpretation
 
+    @property
+    def orchestration_hints(self) -> Dict[str, Any]:
+        """
+        Fast-path routing hints to bypass LLM tool selection.
+
+        When user input matches these patterns, route directly to this tool
+        without asking the LLM which tool to use - saves ~1-2s latency.
+        """
+        return {
+            "enabled": True,
+            "priority": 10,
+            "query_patterns": [
+                # Case-insensitive patterns for spot story generation
+                r"(?:write|create|draft|generate)\s+(?:a\s+)?spot\s+story",
+                r"(?:new|make)\s+(?:a\s+)?spot\s+story",
+                r"spot\s+story\s+(?:about|on|for)",
+            ],
+            "parameter_extractions": [
+                {
+                    "parameter_name": "request",
+                    "jsonpath": None,
+                    "fallback": "user_query",
+                    "required": True,
+                    "default": None
+                }
+            ],
+            "description": "Handles spot story generation requests"
+        }
+
     def _error_response(self, message: str, is_error: bool = True) -> ToolResult:
         """Create a consistent error/info response."""
         return ToolResult(

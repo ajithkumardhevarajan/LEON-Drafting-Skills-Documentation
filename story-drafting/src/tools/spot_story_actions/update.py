@@ -1,6 +1,7 @@
 """Story update generation logic
 """
 
+import asyncio
 import logging
 from typing import List, Tuple, Any, Optional
 
@@ -124,19 +125,19 @@ async def generate_updated_spot_story_content(
     story_body = update_output.updated_story
     advisory = update_output.advisory
 
-    # Generate references if there are background assets
-    story_body_with_references = ""
-    source_headlines = None
+    # Optimized: Run references and headline in parallel (both only need body)
+    source_headlines = [asset.headline for asset in background_assets] if background_assets else None
+
     if background_assets:
-        story_body_with_references = await generate_references(
-            story_body, background_assets, llm
+        story_body_with_references, story_headline = await asyncio.gather(
+            generate_references(story_body, background_assets, llm),
+            generate_headline(story_body, llm)
         )
-        source_headlines = [asset.headline for asset in background_assets]
+    else:
+        story_body_with_references = ""
+        story_headline = await generate_headline(story_body, llm)
 
-    # Generate headline
-    story_headline = await generate_headline(story_body, llm)
-
-    # Generate bullet points
+    # Bullet points need headline, so runs after
     story_bullets = await generate_bullet_points(story_headline, story_body, llm)
 
     # Format as HTML with advisory
