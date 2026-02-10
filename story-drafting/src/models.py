@@ -167,6 +167,24 @@ class ToolResult(BaseModel):
 
 
 # ============================================================================
+# Asset Models
+# ============================================================================
+
+class Asset(BaseModel):
+    """Represents a Reuters news asset (story, alert, etc.)"""
+    id: str
+    headline: str
+    body: Optional[str] = None
+    modified_at: Optional[str] = None
+    usn: Optional[str] = None
+
+
+class SelectableAsset(Asset):
+    """Asset with selection state for user interaction"""
+    included: bool = True
+
+
+# ============================================================================
 # Health Check Models
 # ============================================================================
 

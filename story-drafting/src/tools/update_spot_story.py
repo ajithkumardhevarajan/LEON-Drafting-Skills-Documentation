@@ -1,12 +1,12 @@
 """
-Generate Spot Story Tool
+Update Spot Story Tool
 
-This tool generates new spot stories from provided content sources with optional
-archive search for background context. Implements the full workflow with
-human-in-the-loop review using the MCP HITL framework.
+This tool updates existing spot stories by integrating new information.
+Supports two modes: add_background (preserve lede) and story_rewrite (new lede).
+Implements the full workflow with human-in-the-loop review.
 
 Ported from LangGraph implementation:
-/reuters-assistant-langraph-api/src/projects/leon/graphs/spot_story_agent.py
+/reuters-assistant-langraph-api/src/projects/leon/graphs/spot_story_update_agent.py
 """
 
 from typing import Any, Dict, Optional, List
@@ -17,8 +17,9 @@ from .base import BaseTool
 from ..models import ToolResult, Asset
 from ..services import get_llm_orchestrator, get_intent_interpreter
 from .spot_story_actions import (
-    generate_spot_story_content,
-    handle_refinement,
+    fetch_existing_story,
+    select_update_mode,
+    generate_updated_spot_story_content,
     search_archive_assets,
     handle_asset_selection,
     refine_story_content,
@@ -27,33 +28,35 @@ from .spot_story_actions import (
     ACTION_REFINE,
     ACTION_CANCEL,
     INTERRUPT_TYPE_REVIEW,
+    UpdateMode,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class GenerateSpotStoryTool(BaseTool):
+class UpdateSpotStoryTool(BaseTool):
     """
-    Tool for generating new spot stories from provided content.
+    Tool for updating existing spot stories with new information.
 
-    This tool implements the full spot story generation workflow:
-    1. Optionally search archive for background sources
-    2. Generate story body using Gemini 2.5 Pro
-    3. Generate headline, bullets, references
-    4. Present for review (interrupt)
-    5. Handle user feedback (approve/refine/regenerate/cancel)
+    This tool implements the full story update workflow:
+    1. Fetch existing story by USN
+    2. Prompt user for update mode selection
+    3. Optionally search archive for background sources
+    4. Generate updated story
+    5. Present for review (interrupt)
+    6. Handle user feedback (approve/refine/regenerate/cancel)
     """
 
     @property
     def name(self) -> str:
-        return "generate_spot_story"
+        return "update_spot_story"
 
     @property
     def description(self) -> str:
         return (
-            "Generate a complete Reuters spot story from a user's request. "
-            "The tool interprets the user's natural language request to extract content, "
-            "and optionally searches the archive for background context. "
+            "Update an existing Reuters spot story with new information. "
+            "The tool interprets the user's natural language request to extract the USN and new content. "
+            "Supports 'add_background' (preserve lede) or 'story_rewrite' (new lede) modes. "
             "Interactive workflow with generation, review, and refinement."
         )
 
@@ -63,10 +66,9 @@ class GenerateSpotStoryTool(BaseTool):
             "request": {
                 "type": "string",
                 "description": (
-                    "The user's natural language request for generating a spot story. "
-                    "Can include: story idea, press release content, facts to cover, "
-                    "and whether to use archive for background. "
-                    "Example: 'Write a spot story about Apple's $500B US investment with archive background'"
+                    "The user's natural language request for updating a spot story. "
+                    "Must include the USN of the story to update and the new information to add. "
+                    "Example: 'Update story LXN3VG03Q with new info that the deal closes in Q1'"
                 ),
                 "required": True
             }
@@ -74,7 +76,7 @@ class GenerateSpotStoryTool(BaseTool):
 
     @property
     def response_mode(self) -> str:
-        return "direct"  # Return direct response without orchestrator interpretation
+        return "direct"
 
     def _error_response(self, message: str, is_error: bool = True) -> ToolResult:
         """Create a consistent error/info response."""
@@ -85,20 +87,28 @@ class GenerateSpotStoryTool(BaseTool):
 
     # Delegate methods for @resumable decorator caching
 
+    async def _fetch_story(self, jwt_token: str, usn: str) -> Optional[Asset]:
+        return await fetch_existing_story(jwt_token, usn)
+
+    def _select_update_mode(self) -> UpdateMode:
+        return select_update_mode()
+
     async def _search_archive(self, jwt_token: str, query: str) -> List[Asset]:
         return await search_archive_assets(jwt_token, query)
 
     def _handle_asset_selection(self, assets: List[Asset]) -> List[Asset]:
         return handle_asset_selection(assets)
 
-    async def _generate_story(
+    async def _generate_updated_story(
         self,
+        existing_story: Asset,
         new_content_sources: str,
+        update_mode: UpdateMode,
         background_assets: List[Asset],
         llm
     ):
-        return await generate_spot_story_content(
-            new_content_sources, background_assets, llm
+        return await generate_updated_spot_story_content(
+            existing_story, new_content_sources, update_mode, background_assets, llm
         )
 
     async def _refine_story(
@@ -116,13 +126,14 @@ class GenerateSpotStoryTool(BaseTool):
         jwt_token: Optional[str] = None
     ) -> ToolResult:
         """
-        Execute spot story generation workflow.
+        Execute story update workflow.
 
-        1. Optionally search archive for background sources
-        2. Generate complete spot story
-        3. Present for review (interrupt)
-        4. Handle user feedback (approve/refine/regenerate/cancel)
-        5. Loop back to review after any changes
+        1. Fetch existing story by USN
+        2. Prompt for update mode selection
+        3. Optionally search archive for background sources
+        4. Generate updated story
+        5. Present for review (interrupt)
+        6. Handle user feedback (approve/refine/regenerate/cancel)
         """
         # Initialize services
         llm = get_llm_orchestrator()
@@ -151,15 +162,15 @@ class GenerateSpotStoryTool(BaseTool):
         # Use intent interpreter to extract structured parameters from the request
         try:
             logger.info(f"Interpreting user request: {user_request[:100]}...")
-            extracted = await interpreter.interpret_spot_story_request(user_request)
+            extracted = await interpreter.interpret_story_update_request(user_request)
 
-            new_content_sources = extracted.content_sources
+            usn = extracted.usn
+            new_content_sources = extracted.new_content
             use_archive = extracted.use_archive
             archive_query = extracted.archive_query or ""
-            story_topic = extracted.story_topic
 
             logger.info(
-                f"Extracted parameters - topic: {story_topic}, "
+                f"Extracted parameters - usn: {usn}, "
                 f"use_archive: {use_archive}, "
                 f"archive_query: {archive_query}, "
                 f"content_length: {len(new_content_sources)}"
@@ -169,24 +180,44 @@ class GenerateSpotStoryTool(BaseTool):
             logger.error(f"Failed to interpret request: {e}")
             return self._error_response(f"Failed to understand request: {str(e)}")
 
+        if not usn:
+            return self._error_response("Could not extract USN from request. Please specify the story USN to update.")
+
+        if not new_content_sources:
+            return self._error_response("Could not extract new content from request. Please specify what to update.")
+
         if not jwt_token:
             return self._error_response("Authentication token is required")
 
-        # Initialize state
-        background_assets: List[Asset] = []
-        current_headline = None
-        current_body = None
-        current_bullets = None
-        current_story = None
+        # Step 1: Fetch existing story
+        logger.info(f"Fetching existing story with USN: {usn}")
 
-        # Step 1: Archive search if requested
+        try:
+            existing_story = await self._fetch_story(jwt_token, usn)
+
+            if not existing_story:
+                return self._error_response(f"No story found with USN: {usn}")
+
+            logger.info(f"Found story: {existing_story.headline[:50]}...")
+
+        except Exception as e:
+            logger.error(f"Failed to fetch story: {str(e)}")
+            return self._error_response(f"Failed to fetch story: {str(e)}")
+
+        # Step 2: Select update mode
+        logger.info("Requesting update mode selection from user")
+        update_mode = self._select_update_mode()
+        logger.info(f"Selected update mode: {update_mode}")
+
+        # Step 3: Archive search if requested
+        background_assets: List[Asset] = []
+
         if use_archive and archive_query:
             try:
                 logger.info(f"Searching archive with query: {archive_query}")
                 search_results = await self._search_archive(jwt_token, archive_query)
 
                 if search_results:
-                    # Present for user selection via interrupt
                     background_assets = self._handle_asset_selection(search_results)
                     if background_assets:
                         logger.info(f"User selected {len(background_assets)} background sources")
@@ -199,16 +230,28 @@ class GenerateSpotStoryTool(BaseTool):
                 logger.error(f"Archive search failed: {str(e)}")
                 # Continue without background sources
 
+        # Initialize state
+        current_headline = None
+        current_body = None
+        current_bullets = None
+        current_advisory = None
+        current_story = None
+
         # Main workflow loop
         while True:
             # Generate if needed
             if current_story is None:
                 try:
-                    logger.info(f"Generating spot story with {len(background_assets)} background sources")
+                    logger.info(
+                        f"Generating story update (mode={update_mode}, "
+                        f"{len(background_assets)} background sources)"
+                    )
 
-                    current_headline, current_body, current_bullets, current_story = \
-                        await self._generate_story(
+                    current_headline, current_body, current_bullets, current_advisory, current_story = \
+                        await self._generate_updated_story(
+                            existing_story,
                             new_content_sources,
+                            update_mode,
                             background_assets,
                             llm
                         )
@@ -217,16 +260,19 @@ class GenerateSpotStoryTool(BaseTool):
 
                 except Exception as e:
                     logger.error(f"Generation failed: {str(e)}")
-                    return self._error_response(f"Story generation failed: {str(e)}")
+                    return self._error_response(f"Story update generation failed: {str(e)}")
 
-            # REVIEW INTERRUPT - Core of the workflow
+            # REVIEW INTERRUPT
             logger.info("Requesting story review from user")
 
             review_raw = interrupt({
                 "type": INTERRUPT_TYPE_REVIEW,
-                "message": "Review the generated story and choose an action",
+                "message": "Review the updated story and choose an action",
                 "context": {
                     "content": current_story,
+                    "advisory": current_advisory,
+                    "existing_story_usn": usn,
+                    "update_mode": update_mode,
                     "background_sources": [
                         a.model_dump(mode="json", exclude_none=True)
                         for a in background_assets
@@ -241,7 +287,8 @@ class GenerateSpotStoryTool(BaseTool):
                     "story": current_story,
                     "headline": current_headline,
                     "body": current_body,
-                    "bullets": current_bullets
+                    "bullets": current_bullets,
+                    "advisory": current_advisory
                 }
             )
 
@@ -250,7 +297,7 @@ class GenerateSpotStoryTool(BaseTool):
 
             # Handle user actions
             if action == ACTION_APPROVE:
-                logger.info("Story approved by user")
+                logger.info("Story update approved by user")
                 return ToolResult(
                     content=[{"type": "text", "text": current_story}],
                     isError=False
@@ -263,6 +310,7 @@ class GenerateSpotStoryTool(BaseTool):
                 current_headline = None
                 current_body = None
                 current_bullets = None
+                current_advisory = None
                 # Continue loop to regenerate
 
             elif action == ACTION_REFINE:
@@ -284,10 +332,10 @@ class GenerateSpotStoryTool(BaseTool):
 
             elif action == ACTION_CANCEL:
                 logger.info("User cancelled the workflow")
-                return self._error_response("Spot story generation cancelled by user", is_error=False)
+                return self._error_response("Story update cancelled by user", is_error=False)
 
             else:
-                # Unknown action - treat as refinement request with raw response
+                # Unknown action - treat as refinement request
                 logger.warning(f"Unknown action '{action}', treating as refinement")
                 try:
                     refined_story = await self._refine_story(
