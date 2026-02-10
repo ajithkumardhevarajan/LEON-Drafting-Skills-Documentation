@@ -4,9 +4,6 @@ Update Spot Story Tool
 This tool updates existing spot stories by integrating new information.
 Supports two modes: add_background (preserve lede) and story_rewrite (new lede).
 Implements the full workflow with human-in-the-loop review.
-
-Ported from LangGraph implementation:
-/reuters-assistant-langraph-api/src/projects/leon/graphs/spot_story_update_agent.py
 """
 
 from typing import Any, Dict, Optional, List

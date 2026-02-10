@@ -1,8 +1,4 @@
 """Spot Story Generation Prompts
-
-Ported from LangGraph implementation:
-/reuters-assistant-langraph-api/src/projects/leon/graphs/spot_story_agent.py
-/reuters-assistant-langraph-api/src/projects/leon/graphs/spot_story_update_agent.py
 """
 
 

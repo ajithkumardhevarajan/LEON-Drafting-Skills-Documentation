@@ -1,7 +1,4 @@
 """Story update generation logic
-
-Ported from LangGraph implementation:
-/reuters-assistant-langraph-api/src/projects/leon/graphs/spot_story_update_agent.py
 """
 
 import logging

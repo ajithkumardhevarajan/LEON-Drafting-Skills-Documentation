@@ -1,7 +1,4 @@
 """Spot story content refinement logic
-
-Ported from LangGraph implementation:
-/reuters-assistant-langraph-api/src/projects/leon/graphs/spot_story_agent.py
 """
 
 import logging

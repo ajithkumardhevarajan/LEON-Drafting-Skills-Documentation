@@ -4,9 +4,6 @@ Generate Spot Story Tool
 This tool generates new spot stories from provided content sources with optional
 archive search for background context. Implements the full workflow with
 human-in-the-loop review using the MCP HITL framework.
-
-Ported from LangGraph implementation:
-/reuters-assistant-langraph-api/src/projects/leon/graphs/spot_story_agent.py
 """
 
 from typing import Any, Dict, Optional, List

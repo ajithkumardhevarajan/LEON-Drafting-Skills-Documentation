@@ -1,7 +1,4 @@
 """Formatting utilities for spot story generation.
-
-Ported from LangGraph implementation:
-/reuters-assistant-langraph-api/src/projects/leon/graphs/spot_story/utils/format.py
 """
 
 import re
