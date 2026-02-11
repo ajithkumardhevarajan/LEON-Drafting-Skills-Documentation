@@ -23,6 +23,8 @@ from .spot_story_actions import (
     ACTION_REFINE,
     ACTION_CANCEL,
     INTERRUPT_TYPE_REVIEW,
+    INTERRUPT_TYPE_REQUEST_INFO,
+    SKIP_SENTINEL,
 )
 from ..services.semantic_search import search_semantic
 
@@ -205,7 +207,7 @@ class GenerateSpotStoryTool(BaseTool):
             logger.info("User request lacks sufficient content - prompting for more information")
             # Trigger interrupt to ask for more information
             additional_info = interrupt({
-                "type": "spot_story.request_info",
+                "type": INTERRUPT_TYPE_REQUEST_INFO,
                 "message": "I need more information to draft a spot story. Please provide details such as:\n"
                            "- The main topic or event you want to write about\n"
                            "- Key facts, quotes, or data points\n"
@@ -213,6 +215,10 @@ class GenerateSpotStoryTool(BaseTool):
                            "- Companies, people, or organizations involved\n\n"
                            "Example: 'Disney appointed Bob Iger as CEO and Ford announced a $50B EV investment.'"
             })
+
+            # Clear sentinel value used to bypass CopilotKit's truthy check
+            if isinstance(additional_info, str) and additional_info.strip() == SKIP_SENTINEL:
+                additional_info = ""
 
             # User provided additional info - recursively call with the new content
             if additional_info and isinstance(additional_info, str) and len(additional_info.strip()) > 0:

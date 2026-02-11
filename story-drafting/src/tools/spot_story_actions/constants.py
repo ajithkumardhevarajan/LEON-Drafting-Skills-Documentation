@@ -13,6 +13,9 @@ INTERRUPT_TYPE_UPDATE_MODE = "spot_story_update.mode_selection"
 INTERRUPT_TYPE_REFINEMENT = "spot_story.refinement"
 INTERRUPT_TYPE_REQUEST_INFO = "spot_story.request_info"
 
+# Sentinel value sent by frontend Skip button to bypass CopilotKit's truthy check
+SKIP_SENTINEL = "__SKIP__"
+
 # Model configuration constants
 MODEL_GEMINI_2_5_PRO = "gemini-2-5-pro"
 MODEL_GPT4 = "gpt-4-1"

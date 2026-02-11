@@ -27,6 +27,7 @@ from .spot_story_actions import (
     ACTION_CANCEL,
     INTERRUPT_TYPE_REVIEW,
     INTERRUPT_TYPE_REQUEST_INFO,
+    SKIP_SENTINEL,
     UpdateMode,
 )
 from ..services.semantic_search import search_semantic
@@ -511,6 +512,10 @@ class UpdateSpotStoryTool(BaseTool):
             elif isinstance(additional_info, str):
                 user_text = additional_info.strip()
             else:
+                user_text = ""
+
+            # Clear sentinel value used to bypass CopilotKit's truthy check
+            if user_text == SKIP_SENTINEL:
                 user_text = ""
 
             # Add user text to content sources if provided
