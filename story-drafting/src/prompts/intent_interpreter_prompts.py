@@ -156,20 +156,29 @@ USER REQUEST: "{user_message}"
 
 EXTRACTION RULES:
 
-1. USN (required):
+1. USN (optional):
    - The unique story number to update
    - Format: alphanumeric like "LXN3VG03Q"
    - Look for patterns like "story LXN3VG03Q", "update LXN3VG03Q", "USN: LXN3VG03Q"
+   - Set to null if no USN is explicitly mentioned (page context may provide the story)
 
 2. NEW CONTENT (required):
    - Extract ALL new information to add to the story
    - Include: new facts, updates, quotes, developments
    - Preserve full context and details
+   - If no specific update content provided, extract any general topic mentioned
 
-3. USE ARCHIVE (boolean):
+3. HAS_SUFFICIENT_CONTENT (boolean):
+   - Set to true if user provided specific information to update (facts, quotes, figures, events)
+   - Set to false if it's a generic request like "update story", "draft an update", "write an update"
+     without specific details about what information to add
+   - Example of sufficient: "Update with new revenue figures of $5B" → true
+   - Example of insufficient: "Draft an update" or "Update this story" → false
+
+4. USE ARCHIVE (boolean):
    - Set to true if user wants additional background from archive
    - Default false
 
-4. ARCHIVE QUERY (if use_archive=true):
+5. ARCHIVE QUERY (if use_archive=true):
    - Key search terms for finding related stories
 """

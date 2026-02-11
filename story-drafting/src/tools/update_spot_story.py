@@ -25,8 +25,10 @@ from .spot_story_actions import (
     ACTION_REFINE,
     ACTION_CANCEL,
     INTERRUPT_TYPE_REVIEW,
+    INTERRUPT_TYPE_REQUEST_INFO,
     UpdateMode,
 )
+from ..services.semantic_search import search_semantic
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +54,11 @@ class UpdateSpotStoryTool(BaseTool):
     def description(self) -> str:
         return (
             "Update an existing Reuters spot story with new information. "
-            "The tool interprets the user's natural language request to extract the USN and new content. "
+            "IMPORTANT: When Page Context is available in the system message, you MUST extract and pass: "
+            "(1) usn from '**USN:**' field, (2) page_story_title from '**Headline:**' field, "
+            "(3) page_story_summary from '**Body:**' field. "
             "Supports 'add_background' (preserve lede) or 'story_rewrite' (new lede) modes. "
+            "Uses semantic search to find related background sources. "
             "Interactive workflow with generation, review, and refinement."
         )
 
@@ -73,7 +78,9 @@ class UpdateSpotStoryTool(BaseTool):
                 "type": "string",
                 "description": (
                     "The USN (Unique Story Number) of the story to update. "
-                    "Format: alphanumeric, 6-12 characters (e.g., 'LXN3VG03Q')"
+                    "Format: alphanumeric, 6-12 characters (e.g., 'LXN3VG03Q'). "
+                    "IMPORTANT: Extract this from the Page Context if available (look for '**USN:**' field). "
+                    "Optional if story content is provided via page_story_title/page_story_summary."
                 ),
                 "required": False
             },
@@ -94,6 +101,22 @@ class UpdateSpotStoryTool(BaseTool):
                     "Example: 'The deal closes in Q1' or 'Make it more professional'"
                 ),
                 "required": False
+            },
+            "page_story_title": {
+                "type": "string",
+                "description": (
+                    "REQUIRED when Page Context is available: Extract the headline from '**Headline:**' field in the Page Context. "
+                    "This is the current story's headline that the user wants to update."
+                ),
+                "required": False
+            },
+            "page_story_summary": {
+                "type": "string",
+                "description": (
+                    "REQUIRED when Page Context is available: Extract the body content from '**Body:**' field in the Page Context. "
+                    "This is the current story's body text that the user wants to update."
+                ),
+                "required": False
             }
         }
 
@@ -108,6 +131,11 @@ class UpdateSpotStoryTool(BaseTool):
 
         When user input matches these patterns (especially with USN),
         route directly to this tool without LLM decision - saves ~1-2s latency.
+
+        Parameter extractions use JSONPath to pull data from external_context JSON:
+        - $.story.usn -> usn parameter
+        - $.story.headline -> page_story_title parameter
+        - $.story.body -> page_story_summary parameter
         """
         return {
             "enabled": True,
@@ -118,6 +146,10 @@ class UpdateSpotStoryTool(BaseTool):
                 r"(?:update|rewrite)\s+(?:the\s+)?USN\s+[A-Z0-9]{6,12}",
                 r"(?:add|include)\s+(?:new\s+)?(?:info|information|background)\s+(?:to\s+)?(?:story\s+)?[A-Z0-9]{6,12}",
                 r"[A-Z0-9]{6,12}\s+(?:update|rewrite|add)",
+                # New patterns for page context flow (no USN required)
+                r"(?:draft|write|create)\s+(?:an?\s+)?update",
+                r"update\s+(?:this\s+)?story",
+                r"(?:draft|write)\s+(?:a\s+)?(?:story\s+)?update",
             ],
             "parameter_extractions": [
                 {
@@ -126,9 +158,30 @@ class UpdateSpotStoryTool(BaseTool):
                     "fallback": "user_query",
                     "required": True,
                     "default": None
+                },
+                {
+                    "parameter_name": "usn",
+                    "jsonpath": "$.story.usn",
+                    "fallback": None,
+                    "required": False,
+                    "default": None
+                },
+                {
+                    "parameter_name": "page_story_title",
+                    "jsonpath": "$.story.headline",
+                    "fallback": None,
+                    "required": False,
+                    "default": None
+                },
+                {
+                    "parameter_name": "page_story_summary",
+                    "jsonpath": "$.story.body",
+                    "fallback": None,
+                    "required": False,
+                    "default": None
                 }
             ],
-            "description": "Handles spot story update requests with USN"
+            "description": "Handles spot story update requests with USN or page context"
         }
 
     def _error_response(self, message: str, is_error: bool = True) -> ToolResult:
@@ -148,6 +201,10 @@ class UpdateSpotStoryTool(BaseTool):
 
     async def _search_archive(self, jwt_token: str, query: str) -> List[Asset]:
         return await search_archive_assets(jwt_token, query)
+
+    async def _search_semantic(self, query: str) -> List[Asset]:
+        """Delegate for semantic search to support @resumable caching."""
+        return await search_semantic(query)
 
     def _handle_asset_selection(self, assets: List[Asset]) -> List[Asset]:
         return handle_asset_selection(assets)
@@ -181,12 +238,13 @@ class UpdateSpotStoryTool(BaseTool):
         """
         Execute story update workflow.
 
-        1. Fetch existing story by USN
-        2. Prompt for update mode selection
-        3. Optionally search archive for background sources
-        4. Generate updated story
-        5. Present for review (interrupt)
-        6. Handle user feedback (approve/refine/regenerate/cancel)
+        1. Determine story source (USN fetch or page context)
+        2. Request additional info if needed (request_info interrupt)
+        3. Prompt for update mode selection
+        4. Semantic search for background sources
+        5. Generate updated story
+        6. Present for review (interrupt)
+        7. Handle user feedback (approve/refine/regenerate/cancel)
         """
         # Initialize services
         llm = get_llm_orchestrator()
@@ -196,22 +254,72 @@ class UpdateSpotStoryTool(BaseTool):
         logger.info(f"Received arguments: {arguments}")
         logger.info(f"Arguments keys: {list(arguments.keys())}")
 
-        # Check for direct USN parameter (from LLM orchestration)
-        # The LLM may extract structured parameters directly instead of passing raw request
+        # Extract page context parameters (from fast-path JSONPath extraction)
+        page_story_title = arguments.get("page_story_title")
+        page_story_summary = arguments.get("page_story_summary")
+
+        # Check for direct USN parameter
         direct_usn = arguments.get("usn")
 
-        if direct_usn:
-            # LLM orchestration provided structured parameters directly
-            logger.info(f"Using direct parameters - usn: {direct_usn}")
-            usn = direct_usn
-            # Check multiple possible field names for the new content/instructions
-            # Also fall back to the original query/request if specific fields aren't set
+        # Initialize variables
+        usn = None
+        existing_story = None
+        new_content_sources = ""
+        has_sufficient_content = True
+        update_mode_preset = None
+        use_archive = False
+        archive_query = ""
+
+        # PRIORITY: Page context > USN fetch
+        # If we have story content from page context, use it directly (no API fetch needed)
+        if page_story_title and page_story_summary:
+            # Story content from page context - create Asset directly
+            logger.info(f"Using page context - title: {page_story_title[:50]}...")
+            existing_story = Asset(
+                id="page_context",
+                headline=page_story_title,
+                body=page_story_summary,
+                usn=direct_usn  # Include USN if available (for reference)
+            )
+            # Extract new content from request - check multiple possible fields
             new_content_sources = (
                 arguments.get("new_content") or
                 arguments.get("content") or
                 arguments.get("new_information") or
                 arguments.get("instructions") or
-                arguments.get("request") or  # Original query as fallback
+                ""
+            )
+            # Check if user provided specific update content or just a generic request
+            request_text = arguments.get("request", "")
+            generic_patterns = [
+                "draft an update", "draft update", "write an update", "write update",
+                "create an update", "create update", "update story", "update this story"
+            ]
+            is_generic_request = any(
+                pattern in request_text.lower() for pattern in generic_patterns
+            )
+            # Only consider content sufficient if it's not just echoing the generic request
+            if new_content_sources.strip() and new_content_sources.strip().lower() not in generic_patterns:
+                has_sufficient_content = True
+            else:
+                has_sufficient_content = False
+
+            logger.info(
+                f"Page context flow - has_sufficient_content: {has_sufficient_content}, "
+                f"is_generic_request: {is_generic_request}"
+            )
+
+        elif direct_usn:
+            # No page context but have USN - will need to fetch story
+            logger.info(f"Using USN parameter (no page context) - usn: {direct_usn}")
+            usn = direct_usn
+            # Check multiple possible field names for the new content/instructions
+            new_content_sources = (
+                arguments.get("new_content") or
+                arguments.get("content") or
+                arguments.get("new_information") or
+                arguments.get("instructions") or
+                arguments.get("request") or
                 arguments.get("query") or
                 arguments.get("message") or
                 ""
@@ -223,19 +331,17 @@ class UpdateSpotStoryTool(BaseTool):
                 update_mode_preset = "story_rewrite"
             elif direct_mode == "add_background":
                 update_mode_preset = "add_background"
-            else:
-                update_mode_preset = None  # Will prompt user to select
 
             use_archive = arguments.get("use_archive", False)
             archive_query = arguments.get("archive_query", "")
 
             logger.info(
-                f"Direct params - usn: {usn}, mode: {direct_mode}, "
+                f"Direct USN params - usn: {usn}, mode: {direct_mode}, "
                 f"content_length: {len(new_content_sources)}"
             )
+
         else:
             # Fall back to extracting from natural language request
-            update_mode_preset = None
             user_request = (
                 arguments.get("request") or
                 arguments.get("user_request") or
@@ -247,24 +353,26 @@ class UpdateSpotStoryTool(BaseTool):
 
             if not user_request:
                 return self._error_response(
-                    f"No user request or USN provided. Received keys: {list(arguments.keys())}. "
-                    f"Please provide either a 'request' (natural language) or 'usn' directly."
+                    "Could not find story to update. Please either:\n"
+                    "- Provide a USN (e.g., 'Update story LXN3VG03Q with...')\n"
+                    "- Open a story in LEON so I can use the page context"
                 )
 
-            # Use intent interpreter to extract structured parameters from the request
+            # Use intent interpreter to extract structured parameters
             try:
                 logger.info(f"Interpreting user request: {user_request[:100]}...")
                 extracted = await interpreter.interpret_story_update_request(user_request)
 
                 usn = extracted.usn
                 new_content_sources = extracted.new_content
+                has_sufficient_content = extracted.has_sufficient_content
                 use_archive = extracted.use_archive
                 archive_query = extracted.archive_query or ""
 
                 logger.info(
                     f"Extracted parameters - usn: {usn}, "
+                    f"has_sufficient_content: {has_sufficient_content}, "
                     f"use_archive: {use_archive}, "
-                    f"archive_query: {archive_query}, "
                     f"content_length: {len(new_content_sources)}"
                 )
 
@@ -272,32 +380,75 @@ class UpdateSpotStoryTool(BaseTool):
                 logger.error(f"Failed to interpret request: {e}")
                 return self._error_response(f"Failed to understand request: {str(e)}")
 
-            if not usn:
-                return self._error_response("Could not extract USN from request. Please specify the story USN to update.")
-
-        # Note: If new_content_sources is empty, the workflow can still proceed
-        # because the user may provide content interactively through the mode selection
-        # or archive search flow. This matches the tool's HITL design.
+            # Check if we have a story source
+            if not usn and not (page_story_title and page_story_summary):
+                return self._error_response(
+                    "Could not find story to update. Please either:\n"
+                    "- Provide a USN (e.g., 'Update story LXN3VG03Q with...')\n"
+                    "- Open a story in LEON so I can use the page context"
+                )
 
         if not jwt_token:
             return self._error_response("Authentication token is required")
 
-        # Step 1: Fetch existing story
-        logger.info(f"Fetching existing story with USN: {usn}")
+        # Step 1: Determine story source and fetch if needed
+        if existing_story is None and usn:
+            logger.info(f"Fetching existing story with USN: {usn}")
+            try:
+                existing_story = await self._fetch_story(jwt_token, usn)
+                if not existing_story:
+                    return self._error_response(f"No story found with USN: {usn}")
+                logger.info(f"Found story: {existing_story.headline[:50]}...")
+            except Exception as e:
+                logger.error(f"Failed to fetch story: {str(e)}")
+                return self._error_response(f"Failed to fetch story: {str(e)}")
 
-        try:
-            existing_story = await self._fetch_story(jwt_token, usn)
+        if existing_story is None:
+            return self._error_response(
+                "Could not find story to update. Please either:\n"
+                "- Provide a USN (e.g., 'Update story LXN3VG03Q with...')\n"
+                "- Open a story in LEON so I can use the page context"
+            )
 
-            if not existing_story:
-                return self._error_response(f"No story found with USN: {usn}")
+        # Step 2: Request additional info if needed
+        if not has_sufficient_content or not new_content_sources.strip():
+            logger.info("Insufficient content - prompting for more information")
+            additional_info = interrupt({
+                "type": INTERRUPT_TYPE_REQUEST_INFO,
+                "message": (
+                    f"I found the story: **{existing_story.headline}**\n\n"
+                    "What information would you like to include in this update? Please provide:\n"
+                    "- New facts, figures, or data points\n"
+                    "- New quotes or statements\n"
+                    "- New developments or events\n"
+                    "- Any context or background to add\n\n"
+                    "Example: 'The deal is now expected to close in Q1 2025, "
+                    "and the company announced additional cost savings of $500M.'"
+                )
+            })
 
-            logger.info(f"Found story: {existing_story.headline[:50]}...")
+            # User provided additional info
+            if additional_info and isinstance(additional_info, str) and len(additional_info.strip()) > 0:
+                logger.info("User provided additional information for update")
+                # Combine with any existing content
+                if new_content_sources.strip():
+                    new_content_sources = f"{new_content_sources}\n\n{additional_info}"
+                else:
+                    new_content_sources = additional_info
 
-        except Exception as e:
-            logger.error(f"Failed to fetch story: {str(e)}")
-            return self._error_response(f"Failed to fetch story: {str(e)}")
+                # Set default mode to add_background when user provides info via interrupt
+                # This skips the mode selection prompt and goes directly to semantic search
+                if update_mode_preset is None:
+                    update_mode_preset = "add_background"
+                    logger.info("Auto-set update mode to 'add_background' after user provided content")
+            else:
+                logger.info("User did not provide additional information")
+                return self._error_response(
+                    "No update information provided. Cannot proceed with story update.",
+                    is_error=False
+                )
 
-        # Step 2: Select update mode (use preset if provided, otherwise prompt)
+        # Step 3: Select update mode (use preset if provided, otherwise prompt)
         if update_mode_preset:
             update_mode = update_mode_preset
             logger.info(f"Using preset update mode: {update_mode}")
@@ -306,26 +457,57 @@ class UpdateSpotStoryTool(BaseTool):
             update_mode = self._select_update_mode()
             logger.info(f"Selected update mode: {update_mode}")
 
-        # Step 3: Archive search if requested
+        # Step 4: Semantic search for background sources
         background_assets: List[Asset] = []
 
+        # Build semantic search query from story headline and new content
+        search_query = f"{existing_story.headline} {new_content_sources[:200]}"
+        try:
+            logger.info(f"Searching for background sources with semantic search")
+            search_results = await self._search_semantic(search_query)
+
+            if search_results:
+                # Present for user selection via interrupt
+                background_assets = self._handle_asset_selection(search_results)
+                if background_assets:
+                    logger.info(f"User selected {len(background_assets)} background sources")
+                else:
+                    logger.info("No background sources selected")
+            else:
+                logger.info("No semantic search results found")
+
+        except KeyboardInterrupt:
+            # Let interrupt exceptions propagate to @resumable decorator
+            raise
+        except Exception as e:
+            # Check if this is an interrupt exception
+            if "Interrupt requested" in str(e):
+                raise
+            logger.error(f"Semantic search failed: {str(e)}")
+            # Continue without background sources
+
+        # Step 5: Archive search if explicitly requested (in addition to semantic)
         if use_archive and archive_query:
             try:
                 logger.info(f"Searching archive with query: {archive_query}")
-                search_results = await self._search_archive(jwt_token, archive_query)
+                archive_results = await self._search_archive(jwt_token, archive_query)
 
-                if search_results:
-                    background_assets = self._handle_asset_selection(search_results)
-                    if background_assets:
-                        logger.info(f"User selected {len(background_assets)} background sources")
-                    else:
-                        logger.info("No background sources selected")
+                if archive_results:
+                    # Filter out duplicates (assets already in background_assets)
+                    existing_ids = {a.id for a in background_assets}
+                    new_archive_assets = [a for a in archive_results if a.id not in existing_ids]
+
+                    if new_archive_assets:
+                        additional_assets = self._handle_asset_selection(new_archive_assets)
+                        if additional_assets:
+                            background_assets.extend(additional_assets)
+                            logger.info(f"Added {len(additional_assets)} archive sources")
                 else:
                     logger.info("No archive results found")
 
             except Exception as e:
                 logger.error(f"Archive search failed: {str(e)}")
-                # Continue without background sources
+                # Continue without additional archive sources
 
         # Initialize state
         current_headline = None

@@ -96,13 +96,22 @@ class SpotStoryRequest(BaseModel):
 
 class StoryUpdateRequest(BaseModel):
     """Extracted parameters from user's story update request."""
-    usn: str = Field(
+    usn: Optional[str] = Field(
+        default=None,
         description="The USN (unique story number) of the existing story to update. "
-                    "Format is typically alphanumeric like 'LXN3VG03Q'."
+                    "Format is typically alphanumeric like 'LXN3VG03Q'. "
+                    "Optional if story content is available from page context."
     )
     new_content: str = Field(
         description="The new information to add or update in the story. "
                     "Extract all relevant new facts, quotes, or developments."
+    )
+    has_sufficient_content: bool = Field(
+        default=True,
+        description="Whether the user provided enough specific information to update the story. "
+                    "True if the request contains: specific updates, new facts, quotes, data points. "
+                    "False if it's just a generic request like 'update story' or 'draft an update' "
+                    "without any specific details about what information to add."
     )
     use_archive: bool = Field(
         default=False,
