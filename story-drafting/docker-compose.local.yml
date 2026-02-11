@@ -1,0 +1,50 @@
+# Docker Compose for local development
+#
+# NOTE: For easier local development, use the run-docker-local.sh script instead:
+#   ./run-docker-local.sh
+#
+# The script automatically:
+#   - Fetches JFrog credentials from AWS SSM
+#   - Builds the Docker image
+#   - Runs the container with AWS credentials mounted
+#
+# This docker-compose file is provided for reference or if you prefer compose.
+# It requires JFROG_USERNAME and JFROG_TOKEN to be set in your environment first.
+
+version: '3.8'
+
+services:
+  story-drafting:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      args:
+        # These must be set in your environment before running docker compose
+        # Easiest way: source ./setup-local.sh first, then run docker compose
+        - JFROG_USERNAME=${JFROG_USERNAME}
+        - JFROG_TOKEN=${JFROG_TOKEN}
+    image: story-drafting-local:latest
+    container_name: story-drafting-local
+    ports:
+      - "8004:8000"
+    environment:
+      # Server configuration
+      - MCP_PORT=8000
+      - MCP_HOST=0.0.0.0
+
+      # AWS configuration for secrets fetch
+      - AWS_REGION=eu-west-1
+      - AWS_PROFILE=tr-central-preprod
+      - SECRET_NAME=a207920-leon-skills
+
+    # Mount AWS credentials for secrets fetch
+    volumes:
+      - ~/.aws:/home/nonroot/.aws:ro
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

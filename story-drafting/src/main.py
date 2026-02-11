@@ -202,6 +202,11 @@ class StoryDraftingMCPServer:
         # Convert to MCP schema format
         tool_schemas = [tool.to_mcp_schema() for tool in tools]
 
+        # Debug: Log orchestration hints for each tool
+        for tool in tools:
+            hints = tool.orchestration_hints
+            logger.info(f"Tool '{tool.name}' orchestration_hints: {hints is not None}, enabled: {hints.get('enabled') if hints else 'N/A'}")
+
         logger.info(f"Returning {len(tool_schemas)} tools")
         return JSONResponse(
             content={"jsonrpc": "2.0", "id": request_id, "result": {"tools": tool_schemas}}

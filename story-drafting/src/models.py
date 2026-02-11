@@ -143,13 +143,17 @@ class Tool(BaseModel):
         if required_params:
             schema["inputSchema"]["required"] = required_params
 
-        # Add meta fields for backend orchestration
+        # Add meta fields for backend orchestration (must be inside "meta" dict)
+        meta = {}
         if self.response_mode:
-            schema["response_mode"] = self.response_mode
+            meta["response_mode"] = self.response_mode
         if self.preferred_model:
-            schema["preferred_model"] = self.preferred_model
+            meta["preferred_model"] = self.preferred_model
         if self.orchestration_hints:
-            schema["orchestration_hints"] = self.orchestration_hints
+            meta["orchestration_hints"] = self.orchestration_hints
+
+        if meta:
+            schema["meta"] = meta
 
         return schema
 
@@ -164,6 +168,24 @@ class ToolResult(BaseModel):
     """Result from tool execution"""
     content: List[Dict[str, Any]]  # Array of {type: "text", text: "..."} or {type: "image", data: "..."}
     isError: bool = False
+
+
+# ============================================================================
+# Asset Models
+# ============================================================================
+
+class Asset(BaseModel):
+    """Represents a Reuters news asset (story, alert, etc.)"""
+    id: str
+    headline: str
+    body: Optional[str] = None
+    modified_at: Optional[str] = None
+    usn: Optional[str] = None
+
+
+class SelectableAsset(Asset):
+    """Asset with selection state for user interaction"""
+    included: bool = True
 
 
 # ============================================================================
