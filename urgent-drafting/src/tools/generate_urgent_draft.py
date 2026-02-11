@@ -54,7 +54,7 @@ class GenerateUrgentDraftTool(BaseTool):
     @property
     def parameters(self) -> Dict[str, Any]:
         return {
-            "selected_usn": {
+            "usn": {
                 "type": "string",
                 "description": "Pre-selected USN from context. You always must pass this parameter. Example format: EMQ8BGO4Q",
                 "required": True
