@@ -72,6 +72,13 @@ class SpotStoryRequest(BaseModel):
                     "story idea, facts, quotes, or any source material the user provided. "
                     "Extract and include ALL relevant information from the user's message."
     )
+    has_sufficient_content: bool = Field(
+        description="Whether the user provided enough specific information to write a story. "
+                    "True if the request contains: specific topics, company/person names, events, "
+                    "facts, quotes, or detailed subject matter. "
+                    "False if it's just a generic request like 'Draft a spot story' or 'Write a story' "
+                    "without any specific details about what the story should be about."
+    )
     use_archive: bool = Field(
         default=False,
         description="Whether the user wants to search the archive for background/context. "

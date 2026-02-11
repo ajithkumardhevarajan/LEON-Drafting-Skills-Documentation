@@ -10,6 +10,7 @@ from .intent_models import (
     StoryUpdateOutput,
     UpdateModeSelection,
 )
+from .semantic_search import search_semantic
 
 # Global singleton instance
 _llm_orchestrator = None
@@ -36,4 +37,5 @@ __all__ = [
     "RefinementInstructions",
     "StoryUpdateOutput",
     "UpdateModeSelection",
+    "search_semantic",
 ]

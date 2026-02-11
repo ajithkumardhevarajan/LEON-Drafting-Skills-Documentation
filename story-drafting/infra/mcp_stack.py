@@ -213,6 +213,16 @@ class MCPStack(Stack):
                 "ORCHESTRATOR_DEPLOYMENT_GPT4_1": ecs.Secret.from_secrets_manager(
                     orchestrator_secret, "ORCHESTRATOR_DEPLOYMENT_GPT4_1"
                 ),
+                # Semantic Search OAuth credentials
+                "SEMANTIC_SEARCH_CLIENT_ID": ecs.Secret.from_secrets_manager(
+                    orchestrator_secret, "SEMANTIC_SEARCH_CLIENT_ID"
+                ),
+                "SEMANTIC_SEARCH_CLIENT_SECRET": ecs.Secret.from_secrets_manager(
+                    orchestrator_secret, "SEMANTIC_SEARCH_CLIENT_SECRET"
+                ),
+                "SEMANTIC_SEARCH_AUDIENCE": ecs.Secret.from_secrets_manager(
+                    orchestrator_secret, "SEMANTIC_SEARCH_AUDIENCE"
+                ),
             },
         )
 

@@ -104,6 +104,9 @@ LEON_ORCHESTRATOR_CLIENT_ID=$(echo "$SECRET_JSON" | python3 -c "import sys,json;
 LEON_ORCHESTRATOR_CLIENT_SECRET=$(echo "$SECRET_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('LEON_ORCHESTRATOR_CLIENT_SECRET',''))" 2>/dev/null || echo "")
 LEON_ORCHESTRATOR_RESOURCE=$(echo "$SECRET_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('LEON_ORCHESTRATOR_RESOURCE',''))" 2>/dev/null || echo "")
 REUTERS_API_KEY=$(echo "$SECRET_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('REUTERS_API_KEY',''))" 2>/dev/null || echo "")
+SEMANTIC_SEARCH_CLIENT_ID=$(echo "$SECRET_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('SEMANTIC_SEARCH_CLIENT_ID',''))" 2>/dev/null || echo "")
+SEMANTIC_SEARCH_CLIENT_SECRET=$(echo "$SECRET_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('SEMANTIC_SEARCH_CLIENT_SECRET',''))" 2>/dev/null || echo "")
+SEMANTIC_SEARCH_AUDIENCE=$(echo "$SECRET_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('SEMANTIC_SEARCH_AUDIENCE',''))" 2>/dev/null || echo "")
 
 # Verify critical secrets
 echo -e "${BLUE}Secret values status:${NC}"
@@ -115,6 +118,9 @@ echo -e "  LEON_ORCHESTRATOR_TENANT_ID: ${LEON_ORCHESTRATOR_TENANT_ID:+SET}${LEO
 echo -e "  LEON_ORCHESTRATOR_CLIENT_ID: ${LEON_ORCHESTRATOR_CLIENT_ID:+SET}${LEON_ORCHESTRATOR_CLIENT_ID:-NOT SET}"
 echo -e "  LEON_ORCHESTRATOR_CLIENT_SECRET: ${LEON_ORCHESTRATOR_CLIENT_SECRET:+SET (${#LEON_ORCHESTRATOR_CLIENT_SECRET} chars)}${LEON_ORCHESTRATOR_CLIENT_SECRET:-NOT SET}"
 echo -e "  LEON_ORCHESTRATOR_RESOURCE: ${LEON_ORCHESTRATOR_RESOURCE:+SET}${LEON_ORCHESTRATOR_RESOURCE:-NOT SET}"
+echo -e "  SEMANTIC_SEARCH_CLIENT_ID: ${SEMANTIC_SEARCH_CLIENT_ID:+SET}${SEMANTIC_SEARCH_CLIENT_ID:-NOT SET}"
+echo -e "  SEMANTIC_SEARCH_CLIENT_SECRET: ${SEMANTIC_SEARCH_CLIENT_SECRET:+SET (${#SEMANTIC_SEARCH_CLIENT_SECRET} chars)}${SEMANTIC_SEARCH_CLIENT_SECRET:-NOT SET}"
+echo -e "  SEMANTIC_SEARCH_AUDIENCE: ${SEMANTIC_SEARCH_AUDIENCE:+SET}${SEMANTIC_SEARCH_AUDIENCE:-NOT SET}"
 
 if [[ -z "$ORCHESTRATOR_ENDPOINT" ]] || [[ -z "$LEON_ORCHESTRATOR_API_KEY" ]]; then
     echo -e "${YELLOW}⚠ Warning: Critical secrets may be missing${NC}"
@@ -163,6 +169,9 @@ docker run -d \
     -e LEON_ORCHESTRATOR_CLIENT_SECRET="$LEON_ORCHESTRATOR_CLIENT_SECRET" \
     -e LEON_ORCHESTRATOR_RESOURCE="$LEON_ORCHESTRATOR_RESOURCE" \
     -e REUTERS_API_KEY="$REUTERS_API_KEY" \
+    -e SEMANTIC_SEARCH_CLIENT_ID="$SEMANTIC_SEARCH_CLIENT_ID" \
+    -e SEMANTIC_SEARCH_CLIENT_SECRET="$SEMANTIC_SEARCH_CLIENT_SECRET" \
+    -e SEMANTIC_SEARCH_AUDIENCE="$SEMANTIC_SEARCH_AUDIENCE" \
     "$IMAGE_NAME"
 
 # Wait for container to start

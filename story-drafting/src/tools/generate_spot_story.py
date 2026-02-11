@@ -16,7 +16,6 @@ from ..services import get_llm_orchestrator, get_intent_interpreter
 from .spot_story_actions import (
     generate_spot_story_content,
     handle_refinement,
-    search_archive_assets,
     handle_asset_selection,
     refine_story_content,
     ACTION_APPROVE,
@@ -25,6 +24,7 @@ from .spot_story_actions import (
     ACTION_CANCEL,
     INTERRUPT_TYPE_REVIEW,
 )
+from ..services.semantic_search import search_semantic
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class GenerateSpotStoryTool(BaseTool):
     Tool for generating new spot stories from provided content.
 
     This tool implements the full spot story generation workflow:
-    1. Optionally search archive for background sources
+    1. Search for relevant background sources using semantic search
     2. Generate story body using Gemini 2.5 Pro
     3. Generate headline, bullets, references
     4. Present for review (interrupt)
@@ -50,7 +50,7 @@ class GenerateSpotStoryTool(BaseTool):
         return (
             "Generate a complete Reuters spot story from a user's request. "
             "The tool interprets the user's natural language request to extract content, "
-            "and optionally searches the archive for background context. "
+            "and searches for relevant background sources using semantic search. "
             "Interactive workflow with generation, review, and refinement."
         )
 
@@ -61,9 +61,9 @@ class GenerateSpotStoryTool(BaseTool):
                 "type": "string",
                 "description": (
                     "The user's natural language request for generating a spot story. "
-                    "Can include: story idea, press release content, facts to cover, "
-                    "and whether to use archive for background. "
-                    "Example: 'Write a spot story about Apple's $500B US investment with archive background'"
+                    "Can include: story idea, press release content, facts to cover. "
+                    "The tool will automatically search for relevant background sources. "
+                    "Example: 'Write a spot story about Apple's $500B US investment and Ford's EV strategy'"
                 ),
                 "required": True
             }
@@ -111,8 +111,8 @@ class GenerateSpotStoryTool(BaseTool):
 
     # Delegate methods for @resumable decorator caching
 
-    async def _search_archive(self, jwt_token: str, query: str) -> List[Asset]:
-        return await search_archive_assets(jwt_token, query)
+    async def _search_semantic(self, query: str) -> List[Asset]:
+        return await search_semantic(query)
 
     def _handle_asset_selection(self, assets: List[Asset]) -> List[Asset]:
         return handle_asset_selection(assets)
@@ -144,7 +144,7 @@ class GenerateSpotStoryTool(BaseTool):
         """
         Execute spot story generation workflow.
 
-        1. Optionally search archive for background sources
+        1. Search for relevant background sources using semantic search
         2. Generate complete spot story
         3. Present for review (interrupt)
         4. Handle user feedback (approve/refine/regenerate/cancel)
@@ -180,12 +180,14 @@ class GenerateSpotStoryTool(BaseTool):
             extracted = await interpreter.interpret_spot_story_request(user_request)
 
             new_content_sources = extracted.content_sources
+            has_sufficient_content = extracted.has_sufficient_content
             use_archive = extracted.use_archive
             archive_query = extracted.archive_query or ""
             story_topic = extracted.story_topic
 
             logger.info(
                 f"Extracted parameters - topic: {story_topic}, "
+                f"has_sufficient_content: {has_sufficient_content}, "
                 f"use_archive: {use_archive}, "
                 f"archive_query: {archive_query}, "
                 f"content_length: {len(new_content_sources)}"
@@ -198,6 +200,30 @@ class GenerateSpotStoryTool(BaseTool):
         if not jwt_token:
             return self._error_response("Authentication token is required")
 
+        # Check if user provided sufficient content (LLM-determined)
+        if not has_sufficient_content:
+            logger.info("User request lacks sufficient content - prompting for more information")
+            # Trigger interrupt to ask for more information
+            additional_info = interrupt({
+                "type": "spot_story.request_info",
+                "message": "I need more information to draft a spot story. Please provide details such as:\n"
+                           "- The main topic or event you want to write about\n"
+                           "- Key facts, quotes, or data points\n"
+                           "- Any press releases or source material\n"
+                           "- Companies, people, or organizations involved\n\n"
+                           "Example: 'Disney appointed Bob Iger as CEO and Ford announced a $50B EV investment.'"
+            })
+
+            # User provided additional info - recursively call with the new content
+            if additional_info and isinstance(additional_info, str) and len(additional_info.strip()) > 0:
+                logger.info("User provided additional information, reprocessing request")
+                # Combine original request with additional info and reprocess
+                combined_request = f"{user_request}\n\n{additional_info}"
+                return await self.execute({"request": combined_request}, jwt_token)
+            else:
+                logger.info("User did not provide additional information")
+                return self._error_response("No additional information provided. Cannot proceed with story generation.", is_error=False)
+
         # Initialize state
         background_assets: List[Asset] = []
         current_headline = None
@@ -205,11 +231,12 @@ class GenerateSpotStoryTool(BaseTool):
         current_bullets = None
         current_story = None
 
-        # Step 1: Archive search if requested
-        if use_archive and archive_query:
+        # Step 1: Semantic search for background sources
+        # Only search if user provided substantial content (LLM-determined)
+        if has_sufficient_content:
             try:
-                logger.info(f"Searching archive with query: {archive_query}")
-                search_results = await self._search_archive(jwt_token, archive_query)
+                logger.info(f"Searching for background sources with semantic search")
+                search_results = await self._search_semantic(user_request)
 
                 if search_results:
                     # Present for user selection via interrupt
@@ -219,11 +246,20 @@ class GenerateSpotStoryTool(BaseTool):
                     else:
                         logger.info("No background sources selected")
                 else:
-                    logger.info("No archive results found")
+                    logger.info("No semantic search results found")
 
+            except KeyboardInterrupt:
+                # Let interrupt exceptions propagate to @resumable decorator
+                raise
             except Exception as e:
-                logger.error(f"Archive search failed: {str(e)}")
+                # Check if this is an interrupt exception (contains "Interrupt requested")
+                if "Interrupt requested" in str(e):
+                    # Re-raise interrupt exceptions so they're handled by @resumable
+                    raise
+                logger.error(f"Semantic search failed: {str(e)}")
                 # Continue without background sources
+        else:
+            logger.info("Skipping semantic search - insufficient content provided")
 
         # Main workflow loop
         while True:

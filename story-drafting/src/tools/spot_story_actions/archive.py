@@ -63,9 +63,11 @@ def handle_asset_selection(assets: List[Asset]) -> List[Asset]:
     logger.info(f"Presenting {len(assets)} assets for selection")
 
     # Interrupt to get user's selection
+    # Note: Backend expects "options" key for the selectable items
     selected_asset_ids_raw = interrupt({
         "type": INTERRUPT_TYPE_ASSETS_SELECTION,
-        "content": [
+        "message": "Select the articles you would like to use as background sources for your story.",
+        "options": [
             asset.model_dump(mode="json", exclude_none=True)
             for asset in assets
         ]
