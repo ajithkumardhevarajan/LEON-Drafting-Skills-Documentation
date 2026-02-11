@@ -8,6 +8,7 @@ Implements the full workflow with human-in-the-loop review.
 
 from typing import Any, Dict, Optional, List
 import logging
+import re
 from mcp_hitl import resumable, interrupt
 
 from .base import BaseTool
@@ -191,6 +192,46 @@ class UpdateSpotStoryTool(BaseTool):
             isError=is_error
         )
 
+    def _extract_usn_from_text(self, text: str) -> Optional[str]:
+        """
+        Extract USN from user query text.
+
+        USN format: alphanumeric, 6-12 characters (e.g., 'LXN3VG03Q', 'LUN3XF21W').
+        Looks for patterns like:
+        - "USN LUN3XF21W"
+        - "story LUN3XF21W"
+        - "for LUN3XF21W"
+
+        Args:
+            text: The user's request text
+
+        Returns:
+            Extracted USN string or None if not found
+        """
+        if not text:
+            return None
+
+        # Pattern to match USN - alphanumeric 6-12 chars, typically starts with L
+        # Look for USN preceded by common keywords
+        patterns = [
+            r'\bUSN\s+([A-Z0-9]{6,12})\b',           # "USN LUN3XF21W"
+            r'\bstory\s+([A-Z0-9]{6,12})\b',         # "story LUN3XF21W"
+            r'\bfor\s+([A-Z0-9]{6,12})\b',           # "for LUN3XF21W"
+            r'\bupdate\s+([A-Z0-9]{6,12})\b',        # "update LUN3XF21W"
+            r'\b(L[A-Z0-9]{5,11})\b',                # Standalone USN starting with L
+        ]
+
+        text_upper = text.upper()
+
+        for pattern in patterns:
+            match = re.search(pattern, text_upper, re.IGNORECASE)
+            if match:
+                usn = match.group(1)
+                logger.info(f"Extracted USN from query: {usn}")
+                return usn
+
+        return None
+
     # Delegate methods for @resumable decorator caching
 
     async def _fetch_story(self, jwt_token: str, usn: str) -> Optional[Asset]:
@@ -261,6 +302,10 @@ class UpdateSpotStoryTool(BaseTool):
         # Check for direct USN parameter
         direct_usn = arguments.get("usn")
 
+        # Check for USN in the user's request text (highest priority)
+        request_text = arguments.get("request", "")
+        usn_from_query = self._extract_usn_from_text(request_text)
+
         # Initialize variables
         usn = None
         existing_story = None
@@ -270,9 +315,41 @@ class UpdateSpotStoryTool(BaseTool):
         use_archive = False
         archive_query = ""
 
-        # PRIORITY: Page context > USN fetch
-        # If we have story content from page context, use it directly (no API fetch needed)
-        if page_story_title and page_story_summary:
+        # PRIORITY: USN in query > Page context > USN parameter > Natural language
+        # If USN is found in the user's query, fetch that story (overrides page context)
+        if usn_from_query:
+            logger.info(f"USN found in query: {usn_from_query} - will fetch story (overrides page context)")
+            usn = usn_from_query
+            # Extract any additional content from the request (after removing USN patterns)
+            new_content_sources = (
+                arguments.get("new_content") or
+                arguments.get("content") or
+                arguments.get("new_information") or
+                arguments.get("instructions") or
+                ""
+            )
+            # Check if request has specific update content beyond just "draft an update for USN X"
+            generic_patterns = [
+                "draft an update", "draft update", "write an update", "write update",
+                "create an update", "create update", "update story", "update this story",
+                "for usn", "for story"
+            ]
+            is_generic_request = any(
+                pattern in request_text.lower() for pattern in generic_patterns
+            )
+            # If only generic request with USN, we need more info
+            if not new_content_sources.strip():
+                has_sufficient_content = False
+            else:
+                has_sufficient_content = True
+
+            logger.info(
+                f"USN from query flow - usn: {usn}, has_sufficient_content: {has_sufficient_content}, "
+                f"is_generic_request: {is_generic_request}"
+            )
+
+        # If no USN in query, check for page context
+        elif page_story_title and page_story_summary:
             # Story content from page context - create Asset directly
             logger.info(f"Using page context - title: {page_story_title[:50]}...")
             existing_story = Asset(
@@ -427,41 +504,38 @@ class UpdateSpotStoryTool(BaseTool):
                 )
             })
 
-            # User provided additional info
-            if additional_info and isinstance(additional_info, str) and len(additional_info.strip()) > 0:
-                logger.info("User provided additional information for update")
-                # Combine with any existing content
-                if new_content_sources.strip():
-                    new_content_sources = f"{new_content_sources}\n\n{additional_info}"
-                else:
-                    new_content_sources = additional_info
-
-                # Set default mode to add_background when user provides info via interrupt
-                # This skips the mode selection prompt and goes directly to semantic search
-                if update_mode_preset is None:
-                    update_mode_preset = "add_background"
-                    logger.info("Auto-set update mode to 'add_background' after user provided content")
+            # User provided additional info - handle string responses
+            # Dict format for backward compatibility, but we only use the text
+            if isinstance(additional_info, dict):
+                user_text = (additional_info.get("text") or "").strip()
+            elif isinstance(additional_info, str):
+                user_text = additional_info.strip()
             else:
-                logger.info("User did not provide additional information")
-                return self._error_response(
-                    "No update information provided. Cannot proceed with story update.",
-                    is_error=False
-                )
+                user_text = ""
 
-        # Step 3: Select update mode (use preset if provided, otherwise prompt)
-        if update_mode_preset:
-            update_mode = update_mode_preset
-            logger.info(f"Using preset update mode: {update_mode}")
-        else:
-            logger.info("Requesting update mode selection from user")
-            update_mode = self._select_update_mode()
-            logger.info(f"Selected update mode: {update_mode}")
+            # Add user text to content sources if provided
+            if user_text:
+                logger.info("User provided additional information for update")
+                if new_content_sources.strip():
+                    new_content_sources = f"{new_content_sources}\n\n{user_text}"
+                else:
+                    new_content_sources = user_text
+            else:
+                # User skipped - proceed without additional info if we have some content
+                if not new_content_sources.strip():
+                    logger.info("User skipped and no content available")
+                    return self._error_response(
+                        "No update information provided. Cannot proceed with story update.",
+                        is_error=False
+                    )
+                logger.info("User skipped additional info prompt, proceeding with existing content")
 
-        # Step 4: Semantic search for background sources
+        # Step 3: Semantic search for background sources
         background_assets: List[Asset] = []
 
-        # Build semantic search query from story headline and new content
-        search_query = f"{existing_story.headline} {new_content_sources[:200]}"
+        # Build semantic search query from story headline, full body, and new content
+        story_body = existing_story.body or ""
+        search_query = f"{existing_story.headline} {story_body} {new_content_sources}"
         try:
             logger.info(f"Searching for background sources with semantic search")
             search_results = await self._search_semantic(search_query)
@@ -486,7 +560,7 @@ class UpdateSpotStoryTool(BaseTool):
             logger.error(f"Semantic search failed: {str(e)}")
             # Continue without background sources
 
-        # Step 5: Archive search if explicitly requested (in addition to semantic)
+        # Step 4: Archive search if explicitly requested (in addition to semantic)
         if use_archive and archive_query:
             try:
                 logger.info(f"Searching archive with query: {archive_query}")
@@ -508,6 +582,15 @@ class UpdateSpotStoryTool(BaseTool):
             except Exception as e:
                 logger.error(f"Archive search failed: {str(e)}")
                 # Continue without additional archive sources
+
+        # Step 5: Select update mode (use preset if provided, otherwise prompt)
+        if update_mode_preset:
+            update_mode = update_mode_preset
+            logger.info(f"Using preset update mode: {update_mode}")
+        else:
+            logger.info("Requesting update mode selection from user")
+            update_mode = self._select_update_mode()
+            logger.info(f"Selected update mode: {update_mode}")
 
         # Initialize state
         current_headline = None
