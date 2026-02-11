@@ -189,7 +189,7 @@ async def submit_search(query: str, token: str) -> str:
 async def poll_search_results(
     search_id: str,
     token: str,
-    poll_interval: int = 5,
+    poll_interval: int = 2,
     max_attempts: int = 12
 ) -> Dict[str, Any]:
     """
@@ -198,8 +198,8 @@ async def poll_search_results(
     Args:
         search_id: Search ID from submit_search
         token: OAuth2 bearer token
-        poll_interval: Seconds between poll attempts (default: 10)
-        max_attempts: Maximum number of poll attempts (default: 6 = 60s total)
+        poll_interval: Seconds between poll attempts (default: 2)
+        max_attempts: Maximum number of poll attempts (default: 12 = 24s total)
 
     Returns:
         Complete search results payload

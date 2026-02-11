@@ -521,14 +521,9 @@ class UpdateSpotStoryTool(BaseTool):
                 else:
                     new_content_sources = user_text
             else:
-                # User skipped - proceed without additional info if we have some content
-                if not new_content_sources.strip():
-                    logger.info("User skipped and no content available")
-                    return self._error_response(
-                        "No update information provided. Cannot proceed with story update.",
-                        is_error=False
-                    )
-                logger.info("User skipped additional info prompt, proceeding with existing content")
+                # User skipped - proceed to source selection
+                # Selected sources will provide context for the update
+                logger.info("User skipped additional info prompt, proceeding to source selection")
 
         # Step 3: Semantic search for background sources
         background_assets: List[Asset] = []
