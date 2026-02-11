@@ -13,7 +13,7 @@ from ...prompts.spot_story_prompts import (
     REFERENCES_PROMPT,
 )
 from ...utils.format import extract_article_content, format_story_draft
-from .constants import MODEL_GEMINI_2_5_PRO, TEMPERATURE
+from .constants import MODEL_GEMINI_2_5_PRO, TEMPERATURE, GEMINI_EXTRA_BODY
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,8 @@ Background Sources:
     response = await llm.invoke(
         messages,
         model=MODEL_GEMINI_2_5_PRO,
-        temperature=TEMPERATURE
+        temperature=TEMPERATURE,
+        extra_body=GEMINI_EXTRA_BODY
     )
 
     return extract_article_content(response)
@@ -77,7 +78,8 @@ async def generate_headline(body: str, llm: Any) -> str:
     response = await llm.invoke(
         messages,
         model=MODEL_GEMINI_2_5_PRO,
-        temperature=TEMPERATURE
+        temperature=TEMPERATURE,
+        extra_body=GEMINI_EXTRA_BODY
     )
 
     return response.strip()
@@ -103,7 +105,8 @@ async def generate_bullet_points(headline: str, body: str, llm: Any) -> str:
     response = await llm.invoke(
         messages,
         model=MODEL_GEMINI_2_5_PRO,
-        temperature=TEMPERATURE
+        temperature=TEMPERATURE,
+        extra_body=GEMINI_EXTRA_BODY
     )
 
     return response.strip()
@@ -186,7 +189,8 @@ Please proceed with your analysis and reference-adding for the provided content.
     response = await llm.invoke(
         messages,
         model=MODEL_GEMINI_2_5_PRO,
-        temperature=TEMPERATURE
+        temperature=TEMPERATURE,
+        extra_body=GEMINI_EXTRA_BODY
     )
 
     return response.strip()

@@ -8,7 +8,7 @@ from mcp_hitl import interrupt
 from ...models import Asset
 from ...prompts.spot_story_prompts import REFINEMENT_PROMPT
 from ...utils.format import format_story_draft
-from .constants import MODEL_GEMINI_2_5_PRO, TEMPERATURE, INTERRUPT_TYPE_REFINEMENT
+from .constants import MODEL_GEMINI_2_5_PRO, TEMPERATURE, GEMINI_EXTRA_BODY, INTERRUPT_TYPE_REFINEMENT
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,8 @@ Return the full updated story content, maintaining the same format as the input.
     response = await llm.invoke(
         messages,
         model=MODEL_GEMINI_2_5_PRO,
-        temperature=TEMPERATURE
+        temperature=TEMPERATURE,
+        extra_body=GEMINI_EXTRA_BODY
     )
 
     return response.strip()

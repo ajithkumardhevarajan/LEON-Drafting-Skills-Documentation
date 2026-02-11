@@ -13,7 +13,7 @@ from ...prompts.spot_story_prompts import (
 )
 from ...services.intent_models import StoryUpdateOutput
 from ...utils.format import format_story_draft
-from .constants import MODEL_GEMINI_2_5_PRO, TEMPERATURE
+from .constants import MODEL_GEMINI_2_5_PRO, TEMPERATURE, GEMINI_EXTRA_BODY
 from .generate import generate_headline, generate_bullet_points, generate_references
 from .update_mode import UpdateMode
 
@@ -71,7 +71,8 @@ Background Sources:
         messages,
         response_model=StoryUpdateOutput,
         model=MODEL_GEMINI_2_5_PRO,
-        temperature=TEMPERATURE
+        temperature=TEMPERATURE,
+        extra_body=GEMINI_EXTRA_BODY
     )
 
     return response

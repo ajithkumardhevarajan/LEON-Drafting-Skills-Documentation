@@ -222,7 +222,8 @@ class LLMOrchestrator:
         messages: List[Dict[str, str]],
         model: str = "gpt-4-1",
         temperature: float = 0.05,
-        max_tokens: Optional[int] = None
+        max_tokens: Optional[int] = None,
+        extra_body: Optional[Dict] = None
     ) -> str:
         """
         Invoke LLM with messages and return response
@@ -232,6 +233,7 @@ class LLMOrchestrator:
             model: Model to use ("gpt-4-1", "gpt-4o", "o1-mini", etc.)
             temperature: Sampling temperature (0-1)
             max_tokens: Maximum tokens in response
+            extra_body: Optional extra parameters to pass to the API (e.g., thinking_config for Gemini)
 
         Returns:
             Generated text response
@@ -265,13 +267,22 @@ class LLMOrchestrator:
                 f"uses_orchestrator={self._uses_orchestrator()}"
             )
 
+            # Build API call parameters
+            api_params = {
+                "model": api_model,
+                "messages": formatted_messages,
+                "temperature": temperature,
+            }
+
+            if max_tokens is not None:
+                api_params["max_tokens"] = max_tokens
+
+            if extra_body is not None:
+                api_params["extra_body"] = extra_body
+                logger.debug(f"Using extra_body parameters: {extra_body}")
+
             # Make the API call
-            response = client.chat.completions.create(
-                model=api_model,
-                messages=formatted_messages,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
+            response = client.chat.completions.create(**api_params)
 
             content = response.choices[0].message.content
 
@@ -295,7 +306,8 @@ class LLMOrchestrator:
         response_model: Type[T],
         model: str = "gpt-4o",
         temperature: float = 0.05,
-        max_tokens: Optional[int] = None
+        max_tokens: Optional[int] = None,
+        extra_body: Optional[Dict] = None
     ) -> T:
         """
         Invoke LLM with structured output using Pydantic model schema
@@ -310,6 +322,7 @@ class LLMOrchestrator:
             model: Model to use (default "gpt-4o" - structured outputs require compatible models)
             temperature: Sampling temperature (0-1)
             max_tokens: Maximum tokens in response
+            extra_body: Optional extra parameters to pass to the API (e.g., thinking_config for Gemini)
 
         Returns:
             Parsed Pydantic model instance with guaranteed schema compliance
@@ -360,14 +373,23 @@ class LLMOrchestrator:
                 f"temp={temperature}, uses_orchestrator={self._uses_orchestrator()}"
             )
 
+            # Build API call parameters
+            api_params = {
+                "model": api_model,
+                "messages": formatted_messages,
+                "response_format": response_model,
+                "temperature": temperature,
+            }
+
+            if max_tokens is not None:
+                api_params["max_tokens"] = max_tokens
+
+            if extra_body is not None:
+                api_params["extra_body"] = extra_body
+                logger.debug(f"Using extra_body parameters: {extra_body}")
+
             # Make the API call with structured output
-            completion = client.beta.chat.completions.parse(
-                model=api_model,
-                messages=formatted_messages,
-                response_format=response_model,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
+            completion = client.beta.chat.completions.parse(**api_params)
 
             # Extract parsed response
             parsed_response = completion.choices[0].message.parsed

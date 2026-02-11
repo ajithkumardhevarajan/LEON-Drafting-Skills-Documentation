@@ -63,11 +63,37 @@ class UpdateSpotStoryTool(BaseTool):
             "request": {
                 "type": "string",
                 "description": (
-                    "The user's natural language request for updating a spot story. "
-                    "Must include the USN of the story to update and the new information to add. "
+                    "The user's full natural language request for updating a spot story. "
+                    "Pass the complete user query here. "
                     "Example: 'Update story LXN3VG03Q with new info that the deal closes in Q1'"
                 ),
-                "required": True
+                "required": False
+            },
+            "usn": {
+                "type": "string",
+                "description": (
+                    "The USN (Unique Story Number) of the story to update. "
+                    "Format: alphanumeric, 6-12 characters (e.g., 'LXN3VG03Q')"
+                ),
+                "required": False
+            },
+            "mode": {
+                "type": "string",
+                "description": (
+                    "The update mode: 'story_rewrite' (create new lede from new info) or "
+                    "'add_background' (preserve existing lede, add new info as background)"
+                ),
+                "enum": ["story_rewrite", "add_background"],
+                "required": False
+            },
+            "new_content": {
+                "type": "string",
+                "description": (
+                    "The new information, instructions, or content to incorporate into the story. "
+                    "This could be new facts, style instructions, or refinement requests. "
+                    "Example: 'The deal closes in Q1' or 'Make it more professional'"
+                ),
+                "required": False
             }
         }
 
@@ -170,48 +196,88 @@ class UpdateSpotStoryTool(BaseTool):
         logger.info(f"Received arguments: {arguments}")
         logger.info(f"Arguments keys: {list(arguments.keys())}")
 
-        # Extract user request - accept multiple common parameter names from backend
-        user_request = (
-            arguments.get("request") or
-            arguments.get("content") or
-            arguments.get("user_request") or
-            arguments.get("message") or
-            arguments.get("query") or
-            arguments.get("input") or
-            ""
-        )
+        # Check for direct USN parameter (from LLM orchestration)
+        # The LLM may extract structured parameters directly instead of passing raw request
+        direct_usn = arguments.get("usn")
 
-        if not user_request:
-            return self._error_response(
-                f"No user request provided. Received keys: {list(arguments.keys())}"
+        if direct_usn:
+            # LLM orchestration provided structured parameters directly
+            logger.info(f"Using direct parameters - usn: {direct_usn}")
+            usn = direct_usn
+            # Check multiple possible field names for the new content/instructions
+            # Also fall back to the original query/request if specific fields aren't set
+            new_content_sources = (
+                arguments.get("new_content") or
+                arguments.get("content") or
+                arguments.get("new_information") or
+                arguments.get("instructions") or
+                arguments.get("request") or  # Original query as fallback
+                arguments.get("query") or
+                arguments.get("message") or
+                ""
             )
 
-        # Use intent interpreter to extract structured parameters from the request
-        try:
-            logger.info(f"Interpreting user request: {user_request[:100]}...")
-            extracted = await interpreter.interpret_story_update_request(user_request)
+            # Map mode string to UpdateMode literal values
+            direct_mode = arguments.get("mode")
+            if direct_mode == "story_rewrite":
+                update_mode_preset = "story_rewrite"
+            elif direct_mode == "add_background":
+                update_mode_preset = "add_background"
+            else:
+                update_mode_preset = None  # Will prompt user to select
 
-            usn = extracted.usn
-            new_content_sources = extracted.new_content
-            use_archive = extracted.use_archive
-            archive_query = extracted.archive_query or ""
+            use_archive = arguments.get("use_archive", False)
+            archive_query = arguments.get("archive_query", "")
 
             logger.info(
-                f"Extracted parameters - usn: {usn}, "
-                f"use_archive: {use_archive}, "
-                f"archive_query: {archive_query}, "
+                f"Direct params - usn: {usn}, mode: {direct_mode}, "
                 f"content_length: {len(new_content_sources)}"
             )
+        else:
+            # Fall back to extracting from natural language request
+            update_mode_preset = None
+            user_request = (
+                arguments.get("request") or
+                arguments.get("user_request") or
+                arguments.get("message") or
+                arguments.get("query") or
+                arguments.get("input") or
+                ""
+            )
 
-        except Exception as e:
-            logger.error(f"Failed to interpret request: {e}")
-            return self._error_response(f"Failed to understand request: {str(e)}")
+            if not user_request:
+                return self._error_response(
+                    f"No user request or USN provided. Received keys: {list(arguments.keys())}. "
+                    f"Please provide either a 'request' (natural language) or 'usn' directly."
+                )
 
-        if not usn:
-            return self._error_response("Could not extract USN from request. Please specify the story USN to update.")
+            # Use intent interpreter to extract structured parameters from the request
+            try:
+                logger.info(f"Interpreting user request: {user_request[:100]}...")
+                extracted = await interpreter.interpret_story_update_request(user_request)
 
-        if not new_content_sources:
-            return self._error_response("Could not extract new content from request. Please specify what to update.")
+                usn = extracted.usn
+                new_content_sources = extracted.new_content
+                use_archive = extracted.use_archive
+                archive_query = extracted.archive_query or ""
+
+                logger.info(
+                    f"Extracted parameters - usn: {usn}, "
+                    f"use_archive: {use_archive}, "
+                    f"archive_query: {archive_query}, "
+                    f"content_length: {len(new_content_sources)}"
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to interpret request: {e}")
+                return self._error_response(f"Failed to understand request: {str(e)}")
+
+            if not usn:
+                return self._error_response("Could not extract USN from request. Please specify the story USN to update.")
+
+        # Note: If new_content_sources is empty, the workflow can still proceed
+        # because the user may provide content interactively through the mode selection
+        # or archive search flow. This matches the tool's HITL design.
 
         if not jwt_token:
             return self._error_response("Authentication token is required")
@@ -231,10 +297,14 @@ class UpdateSpotStoryTool(BaseTool):
             logger.error(f"Failed to fetch story: {str(e)}")
             return self._error_response(f"Failed to fetch story: {str(e)}")
 
-        # Step 2: Select update mode
-        logger.info("Requesting update mode selection from user")
-        update_mode = self._select_update_mode()
-        logger.info(f"Selected update mode: {update_mode}")
+        # Step 2: Select update mode (use preset if provided, otherwise prompt)
+        if update_mode_preset:
+            update_mode = update_mode_preset
+            logger.info(f"Using preset update mode: {update_mode}")
+        else:
+            logger.info("Requesting update mode selection from user")
+            update_mode = self._select_update_mode()
+            logger.info(f"Selected update mode: {update_mode}")
 
         # Step 3: Archive search if requested
         background_assets: List[Asset] = []

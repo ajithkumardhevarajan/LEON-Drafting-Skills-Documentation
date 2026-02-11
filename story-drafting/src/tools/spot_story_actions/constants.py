@@ -18,3 +18,13 @@ MODEL_GPT4 = "gpt-4-1"
 MODEL_GPT4O = "gpt-4o"
 TEMPERATURE = 0.1
 TEMPERATURE_LOW = 0.05
+
+# Google Gemini thinking configuration
+GEMINI_EXTRA_BODY = {
+    "google": {
+        "thinking_config": {
+            "thinking_budget": 1000,
+            "include_thoughts": False,
+        }
+    }
+}
