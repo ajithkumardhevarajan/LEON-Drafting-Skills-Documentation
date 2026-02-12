@@ -295,6 +295,9 @@ class GenerateSpotStoryTool(BaseTool):
                 "message": "Review the generated story and choose an action",
                 "context": {
                     "content": current_story,
+                    "headline": current_headline,
+                    "body": current_body,
+                    "bullets": current_bullets,
                     "background_sources": [
                         a.model_dump(mode="json", exclude_none=True)
                         for a in background_assets

@@ -632,6 +632,9 @@ class UpdateSpotStoryTool(BaseTool):
                 "message": "Review the updated story and choose an action",
                 "context": {
                     "content": current_story,
+                    "headline": current_headline,
+                    "body": current_body,
+                    "bullets": current_bullets,
                     "advisory": current_advisory,
                     "existing_story_usn": usn,
                     "update_mode": update_mode,
