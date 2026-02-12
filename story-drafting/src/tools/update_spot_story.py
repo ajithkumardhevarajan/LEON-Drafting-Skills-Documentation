@@ -25,6 +25,7 @@ from .spot_story_actions import (
     ACTION_REGENERATE,
     ACTION_REFINE,
     ACTION_CANCEL,
+    ACTION_CREATE_DRAFT,
     INTERRUPT_TYPE_REVIEW,
     INTERRUPT_TYPE_REQUEST_INFO,
     SKIP_SENTINEL,
@@ -698,6 +699,13 @@ class UpdateSpotStoryTool(BaseTool):
             elif action == ACTION_CANCEL:
                 logger.info("User cancelled the workflow")
                 return self._error_response("Story update cancelled by user", is_error=False)
+
+            elif action == ACTION_CREATE_DRAFT:
+                logger.info("User created draft in new tab")
+                return ToolResult(
+                    content=[{"type": "text", "text": "Your draft has been created."}],
+                    isError=False,
+                )
 
             else:
                 # Unknown action - treat as refinement request

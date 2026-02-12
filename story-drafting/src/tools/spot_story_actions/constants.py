@@ -5,6 +5,7 @@ ACTION_APPROVE = "approve"
 ACTION_REGENERATE = "regenerate"
 ACTION_REFINE = "refine"
 ACTION_CANCEL = "cancel"
+ACTION_CREATE_DRAFT = "create_draft"
 
 # Interrupt types
 INTERRUPT_TYPE_REVIEW = "spot_story.review"
