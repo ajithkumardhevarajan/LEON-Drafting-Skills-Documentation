@@ -535,33 +535,37 @@ class UpdateSpotStoryTool(BaseTool):
 
         # Step 3: Semantic search for background sources
         background_assets: List[Asset] = []
+        search_completed = False  # Defensive flag to prevent duplicate search on resume
 
         # Build semantic search query from story headline, full body, and new content
         story_body = existing_story.body or ""
         search_query = f"{existing_story.headline} {story_body} {new_content_sources}"
-        try:
-            logger.info(f"Searching for background sources with semantic search")
-            search_results = await self._search_semantic(search_query)
+        # The search_completed flag prevents re-running search after @resumable resume
+        if not search_completed:
+            try:
+                logger.info(f"Searching for background sources with semantic search")
+                search_results = await self._search_semantic(search_query)
+                search_completed = True  # Mark search as complete to prevent re-run on resume
 
-            if search_results:
-                # Present for user selection via interrupt
-                background_assets = self._handle_asset_selection(search_results)
-                if background_assets:
-                    logger.info(f"User selected {len(background_assets)} background sources")
+                if search_results:
+                    # Present for user selection via interrupt
+                    background_assets = self._handle_asset_selection(search_results)
+                    if background_assets:
+                        logger.info(f"User selected {len(background_assets)} background sources")
+                    else:
+                        logger.info("No background sources selected")
                 else:
-                    logger.info("No background sources selected")
-            else:
-                logger.info("No semantic search results found")
+                    logger.info("No semantic search results found")
 
-        except KeyboardInterrupt:
-            # Let interrupt exceptions propagate to @resumable decorator
-            raise
-        except Exception as e:
-            # Check if this is an interrupt exception
-            if "Interrupt requested" in str(e):
+            except KeyboardInterrupt:
+                # Let interrupt exceptions propagate to @resumable decorator
                 raise
-            logger.error(f"Semantic search failed: {str(e)}")
-            # Continue without background sources
+            except Exception as e:
+                # Check if this is an interrupt exception
+                if "Interrupt requested" in str(e):
+                    raise
+                logger.error(f"Semantic search failed: {str(e)}")
+                # Continue without background sources
 
         # Step 4: Archive search if explicitly requested (in addition to semantic)
         if use_archive and archive_query:

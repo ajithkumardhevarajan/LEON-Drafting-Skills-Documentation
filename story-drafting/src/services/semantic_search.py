@@ -277,14 +277,14 @@ def parse_and_flatten_results(results: Dict[str, Any]) -> List[Asset]:
     Parse search results and flatten into list of Asset objects.
 
     Results have nested structure: results[].searches[].items[]
-    This function flattens all items, sorts by timestamp (most recent first),
-    and takes the top 5.
+    This function flattens all items, deduplicates by story_uid,
+    sorts by timestamp (most recent first), and takes the top 5.
 
     Args:
         results: Complete search results payload from API
 
     Returns:
-        List of up to 5 Asset objects, sorted by content_timestamp descending
+        List of up to 5 unique Asset objects, sorted by content_timestamp descending
     """
     all_items = []
 
@@ -308,8 +308,20 @@ def parse_and_flatten_results(results: Dict[str, Any]) -> List[Asset]:
         reverse=True
     )
 
-    # Take top 5
-    top_items = all_items[:5]
+    # Deduplicate by story_uid, keeping the most recent (first occurrence after sort)
+    seen_ids: set = set()
+    unique_items = []
+    for item in all_items:
+        story_uid = item.get("story_uid", "")
+        if story_uid and story_uid not in seen_ids:
+            seen_ids.add(story_uid)
+            unique_items.append(item)
+
+    if len(unique_items) < len(all_items):
+        logger.info(f"Deduplicated {len(all_items)} items to {len(unique_items)} unique items")
+
+    # Take top 5 unique items
+    top_items = unique_items[:5]
 
     # Map to Asset model
     assets = []
@@ -328,7 +340,7 @@ def parse_and_flatten_results(results: Dict[str, Any]) -> List[Asset]:
         )
         assets.append(asset)
 
-    logger.info(f"Returning top {len(assets)} assets")
+    logger.info(f"Returning top {len(assets)} unique assets")
     return assets
 
 

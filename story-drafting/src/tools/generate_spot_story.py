@@ -232,6 +232,7 @@ class GenerateSpotStoryTool(BaseTool):
 
         # Initialize state
         background_assets: List[Asset] = []
+        search_completed = False  # Defensive flag to prevent duplicate search on resume
         current_headline = None
         current_body = None
         current_bullets = None
@@ -239,10 +240,12 @@ class GenerateSpotStoryTool(BaseTool):
 
         # Step 1: Semantic search for background sources
         # Only search if user provided substantial content (LLM-determined)
-        if has_sufficient_content:
+        # The search_completed flag prevents re-running search after @resumable resume
+        if has_sufficient_content and not search_completed:
             try:
                 logger.info(f"Searching for background sources with semantic search")
                 search_results = await self._search_semantic(user_request)
+                search_completed = True  # Mark search as complete to prevent re-run on resume
 
                 if search_results:
                     # Present for user selection via interrupt
