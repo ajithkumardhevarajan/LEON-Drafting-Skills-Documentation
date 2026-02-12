@@ -23,7 +23,7 @@ def get_review_response_prompt(response_text: str) -> str:
 USER RESPONSE: "{response_text}"
 
 ACTIONS:
-- "approve": User is satisfied and wants to proceed (e.g., "looks good", "perfect", "ok", "ship it", "yes", "lgtm")
+- "approve": User is satisfied and wants to proceed (e.g., "create", "insert", "looks good", "perfect", "ok", "ship it", "yes", "lgtm")
 - "regenerate": User wants a completely new version (e.g., "try again", "redo", "different version", "start over")
 - "refine": User wants specific edits or changes (e.g., "make it shorter", "change X to Y", "add more detail", "fix the headline")
 - "cancel": User wants to stop the process (e.g., "cancel", "stop", "abort", "quit", "nevermind")
