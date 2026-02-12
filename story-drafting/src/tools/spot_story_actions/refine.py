@@ -93,7 +93,12 @@ async def handle_refinement(
         refine_raw = interrupt({
             "type": INTERRUPT_TYPE_REFINEMENT,
             "message": "What specific changes would you like?",
-            "current_content": current_story_draft
+            "context": {
+                "content": current_story_draft,
+                "headline": current_headline,
+                "body": current_body,
+                "bullets": current_bullets,
+            }
         })
 
         # Simple extraction

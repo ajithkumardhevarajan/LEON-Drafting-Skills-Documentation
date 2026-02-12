@@ -27,8 +27,10 @@ from .spot_story_actions import (
     ACTION_CANCEL,
     ACTION_CREATE_DRAFT,
     INTERRUPT_TYPE_REVIEW,
+    INTERRUPT_TYPE_REFINEMENT,
     INTERRUPT_TYPE_REQUEST_INFO,
     SKIP_SENTINEL,
+    CANCEL_REFINEMENT_SENTINEL,
     UpdateMode,
 )
 from ..services.semantic_search import search_semantic
@@ -600,6 +602,13 @@ class UpdateSpotStoryTool(BaseTool):
         current_advisory = None
         current_story = None
 
+        # Track refinement instructions to preserve across regenerations
+        # When user refines and then regenerates, all refinements are automatically re-applied
+        refinement_history: List[str] = []
+        # Track the base story before refinements (for debugging/reference)
+        # This preserves the pre-refinement version in case we need it
+        base_story_before_refinements = None
+
         # Main workflow loop
         while True:
             # Generate if needed
@@ -620,6 +629,25 @@ class UpdateSpotStoryTool(BaseTool):
                         )
 
                     logger.info("Generation successful")
+
+                    # Store as base story before any refinements are applied
+                    base_story_before_refinements = current_story
+
+                    # If we have refinement history, re-apply all refinements to the newly generated story
+                    if refinement_history:
+                        logger.info(f"Re-applying {len(refinement_history)} refinement(s) to regenerated story")
+                        for i, instruction in enumerate(refinement_history, 1):
+                            logger.info(f"Applying refinement {i}/{len(refinement_history)}: {instruction[:100]}...")
+                            try:
+                                current_story = await self._refine_story(
+                                    current_story,
+                                    instruction,
+                                    llm
+                                )
+                            except Exception as e:
+                                logger.error(f"Failed to re-apply refinement {i}: {str(e)}")
+                                # Continue with other refinements
+                        logger.info("All refinements re-applied successfully")
 
                 except Exception as e:
                     logger.error(f"Generation failed: {str(e)}")
@@ -670,20 +698,50 @@ class UpdateSpotStoryTool(BaseTool):
                 )
 
             elif action == ACTION_REGENERATE:
-                logger.info("User requested regeneration")
+                if refinement_history:
+                    logger.info(
+                        f"User requested regeneration - will regenerate and re-apply "
+                        f"{len(refinement_history)} refinement(s)"
+                    )
+                else:
+                    logger.info("User requested regeneration")
+
                 # Clear state to force regeneration
+                # Note: refinement_history and base_story_before_refinements are preserved
                 current_story = None
                 current_headline = None
                 current_body = None
                 current_bullets = None
                 current_advisory = None
-                # Continue loop to regenerate
+                # Continue loop to regenerate (refinements will be re-applied automatically)
 
             elif action == ACTION_REFINE:
                 logger.info("User requested refinement")
                 instructions = review_feedback.get("instructions", "")
 
+                if not instructions:
+                    refinement_input = interrupt({
+                        "type": INTERRUPT_TYPE_REFINEMENT,
+                        "message": "What specific changes would you like to make to this story?",
+                        "context": {
+                            "content": current_story,
+                            "headline": current_headline,
+                            "body": current_body,
+                            "bullets": current_bullets,
+                        }
+                    })
+
+                    if str(refinement_input).strip() == CANCEL_REFINEMENT_SENTINEL:
+                        logger.info("User cancelled refinement")
+                        continue  # Loop back to review
+                    instructions = str(refinement_input).strip()
+
                 if instructions:
+                    # Store the base story before first refinement
+                    if not refinement_history and base_story_before_refinements is None:
+                        base_story_before_refinements = current_story
+                        logger.info("Stored base story before refinements")
+
                     try:
                         refined_story = await self._refine_story(
                             current_story,
@@ -691,7 +749,10 @@ class UpdateSpotStoryTool(BaseTool):
                             llm
                         )
                         current_story = refined_story
-                        logger.info("Refinement successful")
+
+                        # Add to refinement history for re-application on regeneration
+                        refinement_history.append(instructions)
+                        logger.info(f"Refinement successful (total refinements: {len(refinement_history)})")
                     except Exception as e:
                         logger.error(f"Refinement failed: {str(e)}")
                         # Keep current version, continue loop
@@ -710,6 +771,12 @@ class UpdateSpotStoryTool(BaseTool):
             else:
                 # Unknown action - treat as refinement request
                 logger.warning(f"Unknown action '{action}', treating as refinement")
+
+                # Store the base story before first refinement
+                if not refinement_history and base_story_before_refinements is None:
+                    base_story_before_refinements = current_story
+                    logger.info("Stored base story before refinements")
+
                 try:
                     refined_story = await self._refine_story(
                         current_story,
@@ -717,5 +784,9 @@ class UpdateSpotStoryTool(BaseTool):
                         llm
                     )
                     current_story = refined_story
+
+                    # Add to refinement history for re-application on regeneration
+                    refinement_history.append(str(review_raw))
+                    logger.info(f"Refinement successful (total refinements: {len(refinement_history)})")
                 except Exception as e:
                     logger.error(f"Refinement failed: {str(e)}")

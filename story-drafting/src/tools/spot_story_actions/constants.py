@@ -17,6 +17,9 @@ INTERRUPT_TYPE_REQUEST_INFO = "spot_story.request_info"
 # Sentinel value sent by frontend Skip button to bypass CopilotKit's truthy check
 SKIP_SENTINEL = "__SKIP__"
 
+# Sentinel value sent by frontend Cancel button in refinement dialog
+CANCEL_REFINEMENT_SENTINEL = "__CANCEL__"
+
 # Model configuration constants
 MODEL_GEMINI_2_5_PRO = "gemini-2-5-pro"
 MODEL_GPT4 = "gpt-4-1"
