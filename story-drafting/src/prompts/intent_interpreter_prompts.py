@@ -28,7 +28,7 @@ ACTIONS:
 
 FIELDS TO SET:
 - action: (required) The user's intended action based on their feedback
-- instructions: (optional) Only if action="refine" - capture the user's exact refinement request
+- instructions: (optional) ONLY set this if action="refine" AND the user provided SPECIFIC refinement instructions in their message. DO NOT set this field if the message is just the word "Refine" or similar generic requests without details.
 """
 
 

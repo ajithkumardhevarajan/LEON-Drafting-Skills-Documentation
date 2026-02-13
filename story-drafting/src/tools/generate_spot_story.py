@@ -452,25 +452,23 @@ class GenerateSpotStoryTool(BaseTool):
 
             elif action == ACTION_REFINE:
                 logger.info("User requested refinement")
-                instructions = review_feedback.get("instructions", "")
 
-                # If no instructions provided, prompt for them
-                if not instructions:
-                    refinement_input = interrupt({
-                        "type": INTERRUPT_TYPE_REFINEMENT,
-                        "message": "What specific changes would you like to make to this story?",
-                        "context": {
-                            "content": current_story,
-                            "headline": current_headline,
-                            "body": current_body,
-                            "bullets": current_bullets,
-                        }
-                    })
+                # Always prompt the user for refinement instructions
+                refinement_input = interrupt({
+                    "type": INTERRUPT_TYPE_REFINEMENT,
+                    "message": "What specific changes would you like to make to this story?",
+                    "context": {
+                        "content": current_story,
+                        "headline": current_headline,
+                        "body": current_body,
+                        "bullets": current_bullets,
+                    }
+                })
 
-                    if str(refinement_input).strip() == CANCEL_REFINEMENT_SENTINEL:
-                        logger.info("User cancelled refinement")
-                        continue  # Loop back to review
-                    instructions = str(refinement_input).strip()
+                if str(refinement_input).strip() == CANCEL_REFINEMENT_SENTINEL:
+                    logger.info("User cancelled refinement")
+                    continue  # Loop back to review
+                instructions = str(refinement_input).strip()
 
                 if instructions:
                     # Store the base story before first refinement

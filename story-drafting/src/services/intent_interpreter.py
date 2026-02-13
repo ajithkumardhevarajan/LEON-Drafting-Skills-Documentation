@@ -48,7 +48,7 @@ class IntentInterpreter:
 
         # Handle structured responses from UI
         if isinstance(user_response, dict):
-            logger.info(f"Received structured response: {user_response.get('action')}")
+            logger.info(f"✅ FAST-PATH: Received structured response: {user_response}")
             return user_response
 
         # Try to parse JSON string responses
@@ -63,7 +63,7 @@ class IntentInterpreter:
 
         # Use LLM structured output for natural language interpretation
         response_text = str(user_response)
-        logger.info(f"Interpreting natural language response: {response_text[:100]}")
+        logger.info(f"🤖 LLM INTERPRETATION: Type={type(user_response).__name__}, Value={response_text[:100]}")
 
         # Build interpretation prompt
         interpretation_prompt = get_review_response_prompt(response_text)
