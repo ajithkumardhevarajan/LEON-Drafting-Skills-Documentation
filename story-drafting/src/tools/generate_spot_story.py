@@ -8,6 +8,7 @@ human-in-the-loop review using the MCP HITL framework.
 
 from typing import Any, Dict, Optional, List
 import logging
+import re
 from mcp_hitl import resumable, interrupt
 
 from .base import BaseTool
@@ -22,9 +23,12 @@ from .spot_story_actions import (
     ACTION_REGENERATE,
     ACTION_REFINE,
     ACTION_CANCEL,
+    ACTION_CREATE_DRAFT,
     INTERRUPT_TYPE_REVIEW,
     INTERRUPT_TYPE_REQUEST_INFO,
+    INTERRUPT_TYPE_REFINEMENT,
     SKIP_SENTINEL,
+    CANCEL_REFINEMENT_SENTINEL,
 )
 from ..services.semantic_search import search_semantic
 
@@ -111,6 +115,33 @@ class GenerateSpotStoryTool(BaseTool):
             isError=is_error
         )
 
+    def _has_substantial_content(self, request: str) -> bool:
+        """
+        Quick heuristic check for substantial content beyond trigger phrases.
+
+        Returns True if the request contains actual content to extract,
+        False if it's just a bare trigger phrase like "Draft a spot story".
+
+        This allows us to skip the LLM call entirely for empty requests.
+        """
+        # Remove common trigger phrases
+        trigger_patterns = [
+            r"(?:write|create|draft|generate)\s+(?:a\s+)?(?:new\s+)?spot\s+story",
+            r"(?:make|new)\s+(?:a\s+)?spot\s+story",
+            r"spot\s+story\s+(?:about|on|for)?",
+        ]
+        cleaned = request.lower()
+        for pattern in trigger_patterns:
+            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+
+        # Strip whitespace and punctuation
+        cleaned = cleaned.strip(" .!?,;:")
+
+        # Consider substantial if:
+        # - More than 20 characters remaining (likely has actual content)
+        # - Contains any digits (likely data/figures/dates)
+        return len(cleaned) > 20 or bool(re.search(r'\d', cleaned))
+
     # Delegate methods for @resumable decorator caching
 
     async def _search_semantic(self, query: str) -> List[Asset]:
@@ -176,33 +207,42 @@ class GenerateSpotStoryTool(BaseTool):
                 f"No user request provided. Received keys: {list(arguments.keys())}"
             )
 
-        # Use intent interpreter to extract structured parameters from the request
-        try:
-            logger.info(f"Interpreting user request: {user_request[:100]}...")
-            extracted = await interpreter.interpret_spot_story_request(user_request)
+        # Quick heuristic check: if request is just a trigger phrase, skip LLM entirely
+        if not self._has_substantial_content(user_request):
+            logger.info("Request is just a trigger phrase - skipping LLM, asking for info")
+            has_sufficient_content = False
+            new_content_sources = ""
+            use_archive = False
+            archive_query = ""
+            story_topic = "spot story"
+        else:
+            # Full LLM interpretation for requests with actual content
+            try:
+                logger.info(f"Interpreting user request: {user_request[:100]}...")
+                extracted = await interpreter.interpret_spot_story_request(user_request)
 
-            new_content_sources = extracted.content_sources
-            has_sufficient_content = extracted.has_sufficient_content
-            use_archive = extracted.use_archive
-            archive_query = extracted.archive_query or ""
-            story_topic = extracted.story_topic
+                new_content_sources = extracted.content_sources
+                has_sufficient_content = extracted.has_sufficient_content
+                use_archive = extracted.use_archive
+                archive_query = extracted.archive_query or ""
+                story_topic = extracted.story_topic
 
-            logger.info(
-                f"Extracted parameters - topic: {story_topic}, "
-                f"has_sufficient_content: {has_sufficient_content}, "
-                f"use_archive: {use_archive}, "
-                f"archive_query: {archive_query}, "
-                f"content_length: {len(new_content_sources)}"
-            )
+                logger.info(
+                    f"Extracted parameters - topic: {story_topic}, "
+                    f"has_sufficient_content: {has_sufficient_content}, "
+                    f"use_archive: {use_archive}, "
+                    f"archive_query: {archive_query}, "
+                    f"content_length: {len(new_content_sources)}"
+                )
 
-        except Exception as e:
-            logger.error(f"Failed to interpret request: {e}")
-            return self._error_response(f"Failed to understand request: {str(e)}")
+            except Exception as e:
+                logger.error(f"Failed to interpret request: {e}")
+                return self._error_response(f"Failed to understand request: {str(e)}")
 
         if not jwt_token:
             return self._error_response("Authentication token is required")
 
-        # Check if user provided sufficient content (LLM-determined)
+        # Check if user provided sufficient content
         if not has_sufficient_content:
             logger.info("User request lacks sufficient content - prompting for more information")
             # Trigger interrupt to ask for more information
@@ -216,19 +256,57 @@ class GenerateSpotStoryTool(BaseTool):
                            "Example: 'Disney appointed Bob Iger as CEO and Ford announced a $50B EV investment.'"
             })
 
-            # Clear sentinel value used to bypass CopilotKit's truthy check
-            if isinstance(additional_info, str) and additional_info.strip() == SKIP_SENTINEL:
-                additional_info = ""
+            # Handle response - extract text from dict or string
+            if isinstance(additional_info, dict):
+                user_text = (additional_info.get("text") or "").strip()
+            elif isinstance(additional_info, str):
+                user_text = additional_info.strip()
+            else:
+                user_text = ""
 
-            # User provided additional info - recursively call with the new content
-            if additional_info and isinstance(additional_info, str) and len(additional_info.strip()) > 0:
-                logger.info("User provided additional information, reprocessing request")
-                # Combine original request with additional info and reprocess
-                combined_request = f"{user_request}\n\n{additional_info}"
-                return await self.execute({"request": combined_request}, jwt_token)
+            # Clear sentinel value used to bypass CopilotKit's truthy check
+            if user_text == SKIP_SENTINEL:
+                user_text = ""
+
+            # User provided additional info - update content and continue (no recursive call)
+            if user_text:
+                logger.info("User provided additional information, interpreting content")
+                # Combine original request with additional info
+                combined_request = f"{user_request}\n\n{user_text}"
+
+                # Now interpret the combined request with LLM to extract structured content
+                try:
+                    extracted = await interpreter.interpret_spot_story_request(combined_request)
+                    new_content_sources = extracted.content_sources
+                    has_sufficient_content = extracted.has_sufficient_content
+                    use_archive = extracted.use_archive
+                    archive_query = extracted.archive_query or ""
+                    story_topic = extracted.story_topic
+
+                    logger.info(
+                        f"Extracted parameters - topic: {story_topic}, "
+                        f"has_sufficient_content: {has_sufficient_content}, "
+                        f"content_length: {len(new_content_sources)}"
+                    )
+
+                    # If still insufficient, we can't proceed
+                    if not has_sufficient_content:
+                        logger.info("Still insufficient content after user input")
+                        return self._error_response(
+                            "The information provided is still not sufficient to generate a story. "
+                            "Please provide more details about the topic, key facts, or source material.",
+                            is_error=False
+                        )
+
+                except Exception as e:
+                    logger.error(f"Failed to interpret combined request: {e}")
+                    return self._error_response(f"Failed to understand request: {str(e)}")
             else:
                 logger.info("User did not provide additional information")
-                return self._error_response("No additional information provided. Cannot proceed with story generation.", is_error=False)
+                return self._error_response(
+                    "No additional information provided. Cannot proceed with story generation.",
+                    is_error=False
+                )
 
         # Initialize state
         background_assets: List[Asset] = []
@@ -238,13 +316,20 @@ class GenerateSpotStoryTool(BaseTool):
         current_bullets = None
         current_story = None
 
+        # Track refinement instructions to preserve across regenerations
+        refinement_history: List[str] = []
+        base_story_before_refinements = None
+
         # Step 1: Semantic search for background sources
         # Only search if user provided substantial content (LLM-determined)
         # The search_completed flag prevents re-running search after @resumable resume
         if has_sufficient_content and not search_completed:
             try:
-                logger.info(f"Searching for background sources with semantic search")
-                search_results = await self._search_semantic(user_request)
+                # Use the extracted content for search, not the original user request
+                # (which might just be "draft a spot story")
+                search_query = new_content_sources if new_content_sources else user_request
+                logger.info(f"Searching for background sources with semantic search: {search_query[:100]}...")
+                search_results = await self._search_semantic(search_query)
                 search_completed = True  # Mark search as complete to prevent re-run on resume
 
                 if search_results:
@@ -285,6 +370,24 @@ class GenerateSpotStoryTool(BaseTool):
                         )
 
                     logger.info("Generation successful")
+
+                    # Store as base story before any refinements are applied
+                    base_story_before_refinements = current_story
+
+                    # If we have refinement history, re-apply all refinements to the newly generated story
+                    if refinement_history:
+                        logger.info(f"Re-applying {len(refinement_history)} refinement(s) to regenerated story")
+                        for i, instruction in enumerate(refinement_history, 1):
+                            logger.info(f"Applying refinement {i}/{len(refinement_history)}: {instruction[:100]}...")
+                            try:
+                                current_story = await self._refine_story(
+                                    current_story,
+                                    instruction,
+                                    llm
+                                )
+                            except Exception as e:
+                                logger.error(f"Failed to re-apply refinement {i}: {str(e)}")
+                        logger.info("All refinements re-applied successfully")
 
                 except Exception as e:
                     logger.error(f"Generation failed: {str(e)}")
@@ -331,19 +434,50 @@ class GenerateSpotStoryTool(BaseTool):
                 )
 
             elif action == ACTION_REGENERATE:
-                logger.info("User requested regeneration")
+                if refinement_history:
+                    logger.info(
+                        f"User requested regeneration - will regenerate and re-apply "
+                        f"{len(refinement_history)} refinement(s)"
+                    )
+                else:
+                    logger.info("User requested regeneration")
+
                 # Clear state to force regeneration
+                # Note: refinement_history is preserved and will be re-applied
                 current_story = None
                 current_headline = None
                 current_body = None
                 current_bullets = None
-                # Continue loop to regenerate
+                # Continue loop to regenerate (refinements will be re-applied automatically)
 
             elif action == ACTION_REFINE:
                 logger.info("User requested refinement")
                 instructions = review_feedback.get("instructions", "")
 
+                # If no instructions provided, prompt for them
+                if not instructions:
+                    refinement_input = interrupt({
+                        "type": INTERRUPT_TYPE_REFINEMENT,
+                        "message": "What specific changes would you like to make to this story?",
+                        "context": {
+                            "content": current_story,
+                            "headline": current_headline,
+                            "body": current_body,
+                            "bullets": current_bullets,
+                        }
+                    })
+
+                    if str(refinement_input).strip() == CANCEL_REFINEMENT_SENTINEL:
+                        logger.info("User cancelled refinement")
+                        continue  # Loop back to review
+                    instructions = str(refinement_input).strip()
+
                 if instructions:
+                    # Store the base story before first refinement
+                    if not refinement_history and base_story_before_refinements is None:
+                        base_story_before_refinements = current_story
+                        logger.info("Stored base story before refinements")
+
                     try:
                         refined_story = await self._refine_story(
                             current_story,
@@ -351,7 +485,10 @@ class GenerateSpotStoryTool(BaseTool):
                             llm
                         )
                         current_story = refined_story
-                        logger.info("Refinement successful")
+
+                        # Add to refinement history for re-application on regeneration
+                        refinement_history.append(instructions)
+                        logger.info(f"Refinement successful (total refinements: {len(refinement_history)})")
                     except Exception as e:
                         logger.error(f"Refinement failed: {str(e)}")
                         # Keep current version, continue loop
@@ -360,9 +497,22 @@ class GenerateSpotStoryTool(BaseTool):
                 logger.info("User cancelled the workflow")
                 return self._error_response("Spot story generation cancelled by user", is_error=False)
 
+            elif action == ACTION_CREATE_DRAFT:
+                logger.info("User created draft in new tab")
+                return ToolResult(
+                    content=[{"type": "text", "text": "Your draft has been created."}],
+                    isError=False,
+                )
+
             else:
                 # Unknown action - treat as refinement request with raw response
                 logger.warning(f"Unknown action '{action}', treating as refinement")
+
+                # Store the base story before first refinement
+                if not refinement_history and base_story_before_refinements is None:
+                    base_story_before_refinements = current_story
+                    logger.info("Stored base story before refinements")
+
                 try:
                     refined_story = await self._refine_story(
                         current_story,
@@ -370,5 +520,9 @@ class GenerateSpotStoryTool(BaseTool):
                         llm
                     )
                     current_story = refined_story
+
+                    # Add to refinement history for re-application on regeneration
+                    refinement_history.append(str(review_raw))
+                    logger.info(f"Refinement successful (total refinements: {len(refinement_history)})")
                 except Exception as e:
                     logger.error(f"Refinement failed: {str(e)}")
