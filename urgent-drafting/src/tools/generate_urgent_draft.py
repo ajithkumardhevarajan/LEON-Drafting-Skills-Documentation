@@ -48,7 +48,8 @@ class GenerateUrgentDraftTool(BaseTool):
             "Generate an urgent news draft from alerts/flashes. "
             "Interactive workflow with generation, review, and refinement. "
             "Supports USN or keyword search for finding news flashes. "
-            "When an asset ID is provided from page context, that asset becomes the lead alert."
+            "When an asset ID or headline is provided from page context, the matching alert becomes the lead alert. "
+            "Priority: asset ID match first, then headline match if asset ID not provided."
         )
 
     @property
@@ -62,6 +63,11 @@ class GenerateUrgentDraftTool(BaseTool):
             "asset_id": {
                 "type": "string",
                 "description": "Asset ID from context. When provided, this asset becomes the lead alert in the urgent draft. You must pass this parameter if it is provided in the context. Format is uuid'",
+                "required": False
+            },
+            "headline": {
+                "type": "string",
+                "description": "Headline from the open story in the page context. When provided, the system will prioritize the alert that matches this headline. You must pass this parameter if it is provided in the context.",
                 "required": False
             }
         }
@@ -95,8 +101,8 @@ class GenerateUrgentDraftTool(BaseTool):
     async def _generate_urgent_content(self, assets, llm):
         return await generate_urgent_content(assets, llm)
 
-    def _apply_asset_reordering(self, assets, asset_id):
-        return apply_asset_reordering(assets, asset_id)
+    def _apply_asset_reordering(self, assets, asset_id, headline=None):
+        return apply_asset_reordering(assets, asset_id, headline)
 
     def _handle_regeneration(self, feedback, original_assets):
         return handle_regeneration(feedback, original_assets)
@@ -141,8 +147,12 @@ class GenerateUrgentDraftTool(BaseTool):
         while True:
             # Generate if needed
             if current_urgent is None:
-                # Apply asset_id (lead) reordering ONLY on first generation
-                self._apply_asset_reordering(selectable_assets, arguments.get("asset_id"))
+                # Apply asset_id/headline reordering ONLY on first generation
+                self._apply_asset_reordering(
+                    selectable_assets,
+                    arguments.get("asset_id"),
+                    arguments.get("headline")
+                )
 
                 # Check if any assets are included
                 included = [a for a in selectable_assets if a.included]

@@ -51,26 +51,42 @@ async def retrieve_and_prepare_assets(
 
 def apply_asset_reordering(
     assets: List[SelectableAsset],
-    asset_id: Optional[str]
+    asset_id: Optional[str],
+    headline: Optional[str] = None
 ) -> None:
     """
-    Apply asset_id reordering in-place for first generation.
+    Apply asset_id or headline reordering in-place for first generation.
 
     Moves the specified asset to the front of the list to make it the lead alert.
+    Priority: asset_id match first, then headline match if asset_id not provided.
 
     Args:
         assets: List of assets to reorder (modified in-place)
         asset_id: ID of asset to move to front position, or None to skip
+        headline: Headline to match against asset headlines, or None to skip
     """
-    if not asset_id:
-        return
+    # Priority 1: Try asset_id match (most specific)
+    if asset_id:
+        logger.info(f"First generation: reordering assets with asset_id={asset_id}")
+        for i, asset in enumerate(assets):
+            if asset.id == asset_id:
+                selected = assets.pop(i)
+                assets.insert(0, selected)
+                logger.info(f"Moved asset {asset_id} to lead position")
+                return
 
-    logger.info(f"First generation: reordering assets with asset_id={asset_id}")
+    # Priority 2: Try headline match (fallback when no asset_id)
+    if headline:
+        logger.info(f"First generation: attempting to match headline: {headline[:50]}...")
+        headline_normalized = headline.strip().lower()
 
-    # Find and move selected asset to front
-    for i, asset in enumerate(assets):
-        if asset.id == asset_id:
-            selected = assets.pop(i)
-            assets.insert(0, selected)
-            logger.info(f"Moved asset {asset_id} to lead position")
-            break
+        for i, asset in enumerate(assets):
+            if asset.headline:
+                asset_headline_normalized = asset.headline.strip().lower()
+                if asset_headline_normalized == headline_normalized:
+                    selected = assets.pop(i)
+                    assets.insert(0, selected)
+                    logger.info(f"Moved asset matching headline to lead position: {asset.headline}")
+                    return
+
+        logger.info("No asset found matching the provided headline")
