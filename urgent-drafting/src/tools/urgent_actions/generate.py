@@ -1,5 +1,6 @@
 """Urgent content generation logic"""
 
+import json
 import logging
 from typing import List, Tuple, Any
 
@@ -62,7 +63,16 @@ async def generate_urgent_content(
         {"role": "user", "content": body}
     ]
 
-    headline = await llm.invoke(headline_messages, temperature=TEMPERATURE, model=MODEL_GPT4)
+    headline_response = await llm.invoke(headline_messages, temperature=TEMPERATURE, model=MODEL_GPT4)
+
+    # Parse JSON response and extract best headline
+    try:
+        headline_json = json.loads(headline_response)
+        headline = headline_json["best_headline"]
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.error(f"Failed to parse headline JSON: {e}. Response: {headline_response}")
+        # Fallback: use raw response if JSON parsing fails
+        headline = headline_response.strip()
 
     # Format as HTML
     urgent = format_urgent_content(headline, body)

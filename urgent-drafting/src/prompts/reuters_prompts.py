@@ -295,14 +295,48 @@ Based on the list of entities that were extracted, create the best headline poss
 If the story involves a numerical comparison over time, the headline must clearly state that comparison (e.g., 'rise in 2025 versus 2024'). This is a critical requirement.
 </BestHeadline>
 
-<format_instructions>
-CRITICAL: Output ONLY the best headline as plain text. Do NOT include:
-- Entity lists
-- Explanations
-- Multiple variations
-- Any other text
+<Variation>
+Then, write 2 additional variations on the first headline created. Don't change the order of the information very much but highlight different details and use synonyms.
+</Variation>
 
-Return ONLY the single best headline, ready to be used immediately.
+<format_instructions>
+{% raw %}
+The output should be formatted as a JSON instance that conforms to the JSON schema below.
+
+{
+  "type": "object",
+  "properties": {
+    "entities": {
+      "title": "Entities",
+      "description": "Entities identified in the lead and second paragraph, and their corresponding categories in parenthesis",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Entity name followed by category in parentheses, e.g., 'John Smith (person)'"
+      }
+    },
+    "best_headline": {
+      "title": "Best Headline",
+      "description": "The best headline",
+      "type": "string"
+    },
+    "variation_1": {
+      "title": "Variation 1",
+      "description": "First variation of the headline",
+      "type": "string"
+    },
+    "variation_2": {
+      "title": "Variation 2",
+      "description": "Second variation of the headline",
+      "type": "string"
+    }
+  },
+  "required": ["entities", "best_headline", "variation_1", "variation_2"],
+  "additionalProperties": false
+}
+{% endraw %}
+
+Write your final output according to the JSON schema provided.
 </format_instructions>
 
 </Prompt>
