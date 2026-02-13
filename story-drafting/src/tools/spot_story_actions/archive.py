@@ -76,9 +76,16 @@ def handle_asset_selection(assets: List[Asset]) -> List[Asset]:
     # Parse the selection
     try:
         if isinstance(selected_asset_ids_raw, str):
-            selected_asset_ids = json.loads(selected_asset_ids_raw)
-        elif isinstance(selected_asset_ids_raw, list):
-            selected_asset_ids = selected_asset_ids_raw
+            selected_asset_ids_raw = json.loads(selected_asset_ids_raw)
+
+        if isinstance(selected_asset_ids_raw, list):
+            # Handle both old format (list of IDs) and new format (list of objects with id/headline)
+            if len(selected_asset_ids_raw) > 0 and isinstance(selected_asset_ids_raw[0], dict):
+                # New format: extract IDs from objects
+                selected_asset_ids = [item.get('id') for item in selected_asset_ids_raw if isinstance(item, dict) and 'id' in item]
+            else:
+                # Old format: list of IDs
+                selected_asset_ids = selected_asset_ids_raw
         else:
             selected_asset_ids = []
     except (json.JSONDecodeError, TypeError):
