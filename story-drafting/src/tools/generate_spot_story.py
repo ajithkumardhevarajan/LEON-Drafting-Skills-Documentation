@@ -147,7 +147,7 @@ class GenerateSpotStoryTool(BaseTool):
     async def _search_semantic(self, query: str) -> List[Asset]:
         return await search_semantic(query)
 
-    def _handle_asset_selection(self, assets: List[Asset]) -> List[Asset]:
+    def _handle_asset_selection(self, assets: List[Asset]) -> tuple[List[Asset], bool]:
         return handle_asset_selection(assets)
 
     async def _generate_story(
@@ -335,11 +335,44 @@ class GenerateSpotStoryTool(BaseTool):
 
                 if search_results:
                     # Present for user selection via interrupt
-                    background_assets = self._handle_asset_selection(search_results)
+                    # Returns tuple: (selected assets, whether user wants to provide additional info)
+                    background_assets, provide_additional_info = self._handle_asset_selection(search_results)
                     if background_assets:
                         logger.info(f"User selected {len(background_assets)} background sources")
                     else:
                         logger.info("No background sources selected")
+
+                    # Step 1a: If user chose to provide additional info, ask for it now
+                    if provide_additional_info:
+                        logger.info("User chose to provide additional information after source selection")
+                        additional_info = interrupt({
+                            "type": INTERRUPT_TYPE_REQUEST_INFO,
+                            "message": "Please provide any additional information you'd like to include in the story:\n"
+                                       "- Additional context or background\n"
+                                       "- Specific angles or focus areas\n"
+                                       "- Style preferences or requirements\n"
+                                       "- Any other relevant details",
+                            "skill_name": "generate_spot_story"
+                        })
+
+                        # Handle response - extract text from dict or string
+                        if isinstance(additional_info, dict):
+                            user_text = (additional_info.get("text") or "").strip()
+                        elif isinstance(additional_info, str):
+                            user_text = additional_info.strip()
+                        else:
+                            user_text = ""
+
+                        # Clear sentinel value used to bypass CopilotKit's truthy check
+                        if user_text == SKIP_SENTINEL:
+                            user_text = ""
+
+                        # Append additional info to the content sources
+                        if user_text:
+                            logger.info("User provided additional information after source selection")
+                            new_content_sources = f"{new_content_sources}\n\nAdditional Information:\n{user_text}"
+                        else:
+                            logger.info("User did not provide additional information")
                 else:
                     logger.info("No semantic search results found")
 

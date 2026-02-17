@@ -43,28 +43,29 @@ async def search_archive_assets(
     return assets
 
 
-def handle_asset_selection(assets: List[Asset]) -> List[Asset]:
+def handle_asset_selection(assets: List[Asset]) -> tuple[List[Asset], bool]:
     """
-    Present assets to user for selection and return selected assets.
+    Present assets to user for selection and return selected assets and additional info flag.
 
     This function uses an interrupt to present the search results to the user
     and allows them to select which assets to include as background sources.
+    User can choose to provide additional information before generation.
 
     Args:
         assets: List of assets from archive search
 
     Returns:
-        List of selected Asset objects
+        Tuple of (List of selected Asset objects, bool indicating if user wants to provide additional info)
     """
     if not assets:
         logger.info("No assets to select from")
-        return []
+        return [], False
 
     logger.info(f"Presenting {len(assets)} assets for selection")
 
     # Interrupt to get user's selection
     # Note: Backend expects "options" key for the selectable items
-    selected_asset_ids_raw = interrupt({
+    selection_response = interrupt({
         "type": INTERRUPT_TYPE_ASSETS_SELECTION,
         "message": "Select the articles you would like to use as background sources for your story.",
         "options": [
@@ -73,28 +74,46 @@ def handle_asset_selection(assets: List[Asset]) -> List[Asset]:
         ]
     })
 
-    # Parse the selection
-    try:
-        if isinstance(selected_asset_ids_raw, str):
-            selected_asset_ids_raw = json.loads(selected_asset_ids_raw)
+    # Parse the selection - handle new format with assets and provideAdditionalInfo flag
+    provide_additional_info = False
+    selected_asset_ids = []
 
-        if isinstance(selected_asset_ids_raw, list):
-            # Handle both old format (list of IDs) and new format (list of objects with id/headline)
-            if len(selected_asset_ids_raw) > 0 and isinstance(selected_asset_ids_raw[0], dict):
-                # New format: extract IDs from objects
-                selected_asset_ids = [item.get('id') for item in selected_asset_ids_raw if isinstance(item, dict) and 'id' in item]
+    # Debug logging to understand response format
+    logger.info(f"Asset selection response type: {type(selection_response)}")
+    logger.info(f"Asset selection response: {str(selection_response)[:200]}")
+
+    try:
+        if isinstance(selection_response, str):
+            selection_response = json.loads(selection_response)
+            logger.info(f"Parsed JSON response type: {type(selection_response)}")
+
+        # New format: {assets: [...], provideAdditionalInfo: bool}
+        if isinstance(selection_response, dict) and 'assets' in selection_response:
+            assets_data = selection_response.get('assets', [])
+            provide_additional_info = selection_response.get('provideAdditionalInfo', False)
+
+            if isinstance(assets_data, list):
+                if len(assets_data) > 0 and isinstance(assets_data[0], dict):
+                    # Extract IDs from objects
+                    selected_asset_ids = [item.get('id') for item in assets_data if isinstance(item, dict) and 'id' in item]
+                else:
+                    # List of IDs
+                    selected_asset_ids = assets_data
+        # Fallback: old format (list of assets or IDs)
+        elif isinstance(selection_response, list):
+            if len(selection_response) > 0 and isinstance(selection_response[0], dict):
+                # Old format: extract IDs from objects
+                selected_asset_ids = [item.get('id') for item in selection_response if isinstance(item, dict) and 'id' in item]
             else:
                 # Old format: list of IDs
-                selected_asset_ids = selected_asset_ids_raw
-        else:
-            selected_asset_ids = []
-    except (json.JSONDecodeError, TypeError):
-        logger.warning("Failed to parse asset selection, using empty selection")
+                selected_asset_ids = selection_response
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(f"Failed to parse asset selection: {e}, using empty selection")
         selected_asset_ids = []
 
     if not selected_asset_ids:
         logger.info("No assets selected from archive search")
-        return []
+        return [], provide_additional_info
 
     # Filter to selected assets
     selected_assets = [
@@ -102,8 +121,8 @@ def handle_asset_selection(assets: List[Asset]) -> List[Asset]:
         if asset.id in selected_asset_ids
     ]
 
-    logger.info(f"User selected {len(selected_assets)} assets")
-    return selected_assets
+    logger.info(f"User selected {len(selected_assets)} assets, provide_additional_info={provide_additional_info}")
+    return selected_assets, provide_additional_info
 
 
 def convert_to_selectable_assets(

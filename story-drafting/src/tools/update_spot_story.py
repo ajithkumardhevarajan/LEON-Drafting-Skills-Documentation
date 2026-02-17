@@ -251,7 +251,7 @@ class UpdateSpotStoryTool(BaseTool):
         """Delegate for semantic search to support @resumable caching."""
         return await search_semantic(query)
 
-    def _handle_asset_selection(self, assets: List[Asset]) -> List[Asset]:
+    def _handle_asset_selection(self, assets: List[Asset]) -> tuple[List[Asset], bool]:
         return handle_asset_selection(assets)
 
     async def _generate_updated_story(
@@ -530,13 +530,17 @@ class UpdateSpotStoryTool(BaseTool):
                 else:
                     new_content_sources = user_text
             else:
-                # User skipped - proceed to source selection
-                # Selected sources will provide context for the update
-                logger.info("User skipped additional info prompt, proceeding to source selection")
+                # User did not provide additional information - cannot proceed
+                logger.info("User did not provide additional information")
+                return self._error_response(
+                    "No additional information provided. Cannot proceed with story update.",
+                    is_error=False
+                )
 
         # Step 3: Semantic search for background sources
         background_assets: List[Asset] = []
         search_completed = False  # Defensive flag to prevent duplicate search on resume
+        provide_additional_info_after_selection = False
 
         # Build semantic search query from story headline, full body, and new content
         story_body = existing_story.body or ""
@@ -550,7 +554,8 @@ class UpdateSpotStoryTool(BaseTool):
 
                 if search_results:
                     # Present for user selection via interrupt
-                    background_assets = self._handle_asset_selection(search_results)
+                    # Returns tuple: (selected assets, whether user wants to provide additional info)
+                    background_assets, provide_additional_info_after_selection = self._handle_asset_selection(search_results)
                     if background_assets:
                         logger.info(f"User selected {len(background_assets)} background sources")
                     else:
@@ -568,6 +573,39 @@ class UpdateSpotStoryTool(BaseTool):
                 logger.error(f"Semantic search failed: {str(e)}")
                 # Continue without background sources
 
+        # Step 3a: If user chose to provide additional info after source selection, ask for it now
+        # This happens BEFORE mode selection
+        if provide_additional_info_after_selection:
+            logger.info("User chose to provide additional information after source selection")
+            additional_info = interrupt({
+                "type": INTERRUPT_TYPE_REQUEST_INFO,
+                "message": "Please provide any additional information for the story update:\n"
+                           "- New developments or facts to include\n"
+                           "- Additional context or background\n"
+                           "- Specific angles or focus areas\n"
+                           "- Style preferences or requirements",
+                "skill_name": "update_spot_story"
+            })
+
+            # Handle response - extract text from dict or string
+            if isinstance(additional_info, dict):
+                user_text = (additional_info.get("text") or "").strip()
+            elif isinstance(additional_info, str):
+                user_text = additional_info.strip()
+            else:
+                user_text = ""
+
+            # Clear sentinel value used to bypass CopilotKit's truthy check
+            if user_text == SKIP_SENTINEL:
+                user_text = ""
+
+            # Append additional info to the content sources
+            if user_text:
+                logger.info("User provided additional information after source selection")
+                new_content_sources = f"{new_content_sources}\n\nAdditional Information:\n{user_text}"
+            else:
+                logger.info("User did not provide additional information")
+
         # Step 4: Archive search if explicitly requested (in addition to semantic)
         if use_archive and archive_query:
             try:
@@ -580,7 +618,7 @@ class UpdateSpotStoryTool(BaseTool):
                     new_archive_assets = [a for a in archive_results if a.id not in existing_ids]
 
                     if new_archive_assets:
-                        additional_assets = self._handle_asset_selection(new_archive_assets)
+                        additional_assets, _ = self._handle_asset_selection(new_archive_assets)
                         if additional_assets:
                             background_assets.extend(additional_assets)
                             logger.info(f"Added {len(additional_assets)} archive sources")
@@ -592,6 +630,7 @@ class UpdateSpotStoryTool(BaseTool):
                 # Continue without additional archive sources
 
         # Step 5: Select update mode (use preset if provided, otherwise prompt)
+        # This now happens AFTER the optional additional info collection
         if update_mode_preset:
             update_mode = update_mode_preset
             logger.info(f"Using preset update mode: {update_mode}")
