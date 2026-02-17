@@ -142,17 +142,21 @@ class GenerateUrgentDraftTool(BaseTool):
         current_body = None
         current_urgent = None
         lead_asset_id = None
+        is_first_generation = True  # Track if this is the first generation
 
         # Main workflow loop - continues until user approves
         while True:
             # Generate if needed
             if current_urgent is None:
                 # Apply asset_id/headline reordering ONLY on first generation
-                self._apply_asset_reordering(
-                    selectable_assets,
-                    arguments.get("asset_id"),
-                    arguments.get("headline")
-                )
+                # After user reorders and regenerates, respect their ordering
+                if is_first_generation:
+                    self._apply_asset_reordering(
+                        selectable_assets,
+                        arguments.get("asset_id"),
+                        arguments.get("headline")
+                    )
+                    is_first_generation = False  # Mark first generation as complete
 
                 # Check if any assets are included
                 included = [a for a in selectable_assets if a.included]

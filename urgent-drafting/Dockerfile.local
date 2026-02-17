@@ -1,0 +1,85 @@
+# Urgent Drafting MCP Server - Local Development Dockerfile
+#
+# This Dockerfile is for LOCAL DEVELOPMENT.
+# Secrets are passed as environment variables from run-docker-local.sh
+#
+# Build: docker build -f Dockerfile.local -t urgent-drafting-local .
+# Run:   ./run-docker-local.sh (recommended - handles everything)
+
+# ===== Builder stage: Build wheels for all dependencies =====
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim as builder
+
+# Accept JFrog credentials as build arguments (for private packages)
+ARG JFROG_USERNAME
+ARG JFROG_TOKEN
+
+WORKDIR /build
+
+# Install build dependencies
+RUN python3 -m venv /build/venv && \
+    /build/venv/bin/pip install --no-cache-dir --upgrade pip wheel setuptools build
+
+# Copy and build shared package as wheel
+COPY shared/ /build/shared/
+RUN cd /build/shared && \
+    /build/venv/bin/python -m build --wheel --outdir /build/wheels && \
+    echo "=== Built shared package wheel ===" && \
+    ls -lh /build/wheels/
+
+# Copy skill files (needed to build the skill itself)
+COPY urgent-drafting/ /build/skill/
+WORKDIR /build/skill
+
+# Build wheels for all skill dependencies (including JFrog private packages)
+# Note: Dependencies reference sphinx-shared which is already in wheels dir
+RUN /build/venv/bin/pip wheel --wheel-dir /build/wheels --no-cache-dir \
+    --find-links /build/wheels \
+    --index-url https://pypi.org/simple \
+    --extra-index-url "https://${JFROG_USERNAME}:${JFROG_TOKEN}@tr1.jfrog.io/artifactory/api/pypi/pypi/simple" \
+    . && \
+    echo "=== Built all wheels ===" && \
+    ls -lh /build/wheels/
+
+# ===== Runtime stage: Minimal image (no AWS CLI needed - secrets passed via env vars) =====
+FROM public.ecr.aws/docker/library/python:3.11-slim-bookworm
+
+# Install only curl for health checks
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd --system --gid 999 nonroot \
+    && useradd --system --gid 999 --uid 999 --create-home nonroot
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/venv/bin:$PATH"
+
+WORKDIR /app
+
+# Create virtual environment and install from pre-built wheels
+RUN python3 -m venv /app/venv
+
+# Copy wheels from builder and install (fast, no build deps needed)
+COPY --from=builder /build/wheels /tmp/wheels
+RUN /app/venv/bin/pip install --no-cache-dir /tmp/wheels/*.whl && \
+    rm -rf /tmp/wheels && \
+    echo "=== Installed packages ===" && \
+    /app/venv/bin/pip list
+
+# Copy application code (done last for better layer caching)
+COPY --chown=nonroot:nonroot urgent-drafting/src/ ./src/
+COPY --chown=nonroot:nonroot urgent-drafting/run.py ./
+
+# Set ownership of venv
+RUN chown -R nonroot:nonroot /app/venv
+
+USER nonroot
+
+# Expose port (default 8000, override with MCP_PORT env var)
+EXPOSE 8000
+
+# Run the server directly (secrets are passed as env vars)
+CMD ["python", "run.py"]
