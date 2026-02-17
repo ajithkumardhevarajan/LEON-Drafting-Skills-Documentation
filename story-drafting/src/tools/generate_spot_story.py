@@ -253,7 +253,8 @@ class GenerateSpotStoryTool(BaseTool):
                            "- Key facts, quotes, or data points\n"
                            "- Any press releases or source material\n"
                            "- Companies, people, or organizations involved\n\n"
-                           "Example: 'Disney appointed Bob Iger as CEO and Ford announced a $50B EV investment.'"
+                           "Example: 'Disney appointed Bob Iger as CEO and Ford announced a $50B EV investment.'",
+                "skill_name": "generate_spot_story"
             })
 
             # Handle response - extract text from dict or string

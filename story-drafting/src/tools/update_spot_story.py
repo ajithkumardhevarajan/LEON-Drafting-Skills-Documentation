@@ -505,7 +505,8 @@ class UpdateSpotStoryTool(BaseTool):
                     "- Any context or background to add\n\n"
                     "Example: 'The deal is now expected to close in Q1 2025, "
                     "and the company announced additional cost savings of $500M.'"
-                )
+                ),
+                "skill_name": "update_spot_story"
             })
 
             # User provided additional info - handle string responses
