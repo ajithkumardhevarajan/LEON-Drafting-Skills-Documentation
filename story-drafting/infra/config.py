@@ -24,6 +24,8 @@ ENVIRONMENT_CONFIGS = {
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:060725138335:secret:a207920-leon-skills-vWvmX7",
         "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-NonProd",
+        "sphinx_api_url": "https://api.sphinx-test.thomsonreuters.com",
+        "sphinx_base_url": "https://sphinx-test.thomsonreuters.com",
     },
     "qa": {
         "aws_account": "060725138335",
@@ -39,6 +41,8 @@ ENVIRONMENT_CONFIGS = {
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:060725138335:secret:a207920-leon-skills-vWvmX7",
         "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-NonProd",
+        "sphinx_api_url": "https://api.sphinx-test.thomsonreuters.com",
+        "sphinx_base_url": "https://sphinx-test.thomsonreuters.com",
     },
     "staging": {
         "aws_account": "060725138335",
@@ -54,6 +58,8 @@ ENVIRONMENT_CONFIGS = {
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:060725138335:secret:a207920-leon-skills-vWvmX7",
         "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-NonProd",
+        "sphinx_api_url": "https://api.sphinx-test.thomsonreuters.com",
+        "sphinx_base_url": "https://sphinx-test.thomsonreuters.com",
     },
     "uat": {
         "aws_account": "304853478528",
@@ -69,6 +75,8 @@ ENVIRONMENT_CONFIGS = {
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:304853478528:secret:a207920-leon-skills-dxbeCU",
         "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-Prod",
+        "sphinx_api_url": "https://api.sphinx-uat.thomsonreuters.com",
+        "sphinx_base_url": "https://sphinx-uat.thomsonreuters.com",
     },
     "prod": {
         "aws_account": "304853478528",
@@ -84,6 +92,8 @@ ENVIRONMENT_CONFIGS = {
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:304853478528:secret:a207920-leon-skills-dxbeCU",
         "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-Prod",
+        "sphinx_api_url": "https://api.sphinx.thomsonreuters.com",
+        "sphinx_base_url": "https://sphinx.thomsonreuters.com",
     },
 }
 
@@ -176,6 +186,10 @@ class MCPConfig:
         # Set orchestrator chat profile (NonProd vs Prod endpoint)
         self.orchestrator_chat_profile = env_config["orchestrator_chat_profile"]
 
+        # Set Sphinx API URLs
+        self.sphinx_api_url = env_config["sphinx_api_url"]
+        self.sphinx_base_url = env_config["sphinx_base_url"]
+
         # Set SSM parameter prefix with environment
         self.ssm_parameter_prefix = f"/a207920/story-draft/{self.environment}"
 
@@ -219,6 +233,8 @@ class MCPConfig:
             "AWS_DEFAULT_REGION": self.aws_region,
             "MCP_PORT": str(self.container_port),
             "ORCHESTRATOR_CHAT_PROFILE": self.orchestrator_chat_profile,
+            "SPHINX_API_URL": self.sphinx_api_url,
+            "SPHINX_BASE_URL": self.sphinx_base_url,
         }
 
         # Try to load all variables from .env file

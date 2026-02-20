@@ -1,7 +1,8 @@
 """LLM Configuration for Urgent Drafting Skill
 
 This module handles loading LLM configuration from environment variables
-specific to the urgent-drafting skill.
+specific to the urgent-drafting skill. It uses the shared LLM module but
+provides skill-specific deployment configurations.
 """
 
 import os
@@ -31,6 +32,8 @@ def load_llm_config() -> LLMConfig:
 
         Via Orchestrator:
             - ORCHESTRATOR_ENDPOINT
+            - ORCHESTRATOR_ASSET_ID
+            - ORCHESTRATOR_CHAT_PROFILE
             - LEON_ORCHESTRATOR_API_KEY
             - ORCHESTRATOR_API_VERSION
             - LEON_ORCHESTRATOR_TENANT_ID
@@ -39,36 +42,76 @@ def load_llm_config() -> LLMConfig:
             - LEON_ORCHESTRATOR_RESOURCE
             - ORCHESTRATOR_DEPLOYMENT_GPT4O
             - ORCHESTRATOR_DEPLOYMENT_GPT4_1
-            - ORCHESTRATOR_DEPLOYMENT_O1_MINI
-            - ORCHESTRATOR_DEPLOYMENT_O3_MINI
-            - ORCHESTRATOR_DEPLOYMENT_O4_MINI
     """
     # Load orchestrator configuration if available
     orchestrator_config = None
     orchestrator_endpoint = os.getenv("ORCHESTRATOR_ENDPOINT")
 
     if orchestrator_endpoint:
-        # Default deployment configurations for common models
+        # Asset ID for LLM profile (matches orchestrator deployment config)
+        # Use a209289 which is the registered asset in the orchestrator
+        asset_id = os.getenv("ORCHESTRATOR_ASSET_ID", "209289")
+        profile_prefix = f"a{asset_id}"
+
+        # Global headers required by orchestrator
+        global_headers = {
+            "x-tr-chat-profile-name": os.getenv(
+                "ORCHESTRATOR_CHAT_PROFILE",
+                f"{profile_prefix}-Lynx-Editor-Online-NonProd"
+            ),
+            "x-tr-user-sensitivity": "blind",
+            "x-tr-userid": "Lynx-Editor-Online",
+            "x-tr-sessionid": "12345",
+            "x-tr-asset-id": asset_id,
+            "x-tr-authorization": "abc",
+        }
+
+        # Resolve gpt-4-1 deployment and derive profile key from it
+        # Profile key = {prefix}-{model_version} where model_version is after /deployments/
+        # e.g. "a209289-gpt-4-1-2025-04-14/deployments/gpt-4.1-2025-04-14" -> "a209289-gpt-4.1-2025-04-14"
+        _gpt4_1_deployment = os.getenv(
+            "ORCHESTRATOR_DEPLOYMENT_GPT4_1",
+            f"{profile_prefix}-gpt-4-1/deployments/gpt-4-1"
+        )
+        _gpt4_1_profile_key = f"{profile_prefix}-{_gpt4_1_deployment.split('/deployments/')[-1]}"
+
+        # Deployment configurations matching the orchestrator setup
         deployments = {
             "gpt-4o": DeploymentConfig(
-                deployment=os.getenv("ORCHESTRATOR_DEPLOYMENT_GPT4O", "gpt-4o"),
-                model="gpt-4o"
+                deployment=os.getenv(
+                    "ORCHESTRATOR_DEPLOYMENT_GPT4O",
+                    f"{profile_prefix}-gpt-4o-2024-08-06/deployments/gpt-4o-2024-08-06"
+                ),
+                model="gpt-4o",
+                api_version="2025-01-01-preview",
+                headers={"x-tr-llm-profile-key": f"{profile_prefix}-gpt-4o-2024-08-06"}
             ),
             "gpt-4-1": DeploymentConfig(
-                deployment=os.getenv("ORCHESTRATOR_DEPLOYMENT_GPT4_1", "gpt-4-1"),
-                model="gpt-4-1"
+                deployment=os.getenv(
+                    "ORCHESTRATOR_DEPLOYMENT_GPT4_1",
+                    f"{profile_prefix}-gpt-4-1/deployments/gpt-4-1"
+                ),
+                model="gpt-4-1",
+                api_version="2025-01-01-preview",
+                headers={"x-tr-llm-profile-key": _gpt4_1_profile_key}
             ),
             "o1-mini": DeploymentConfig(
-                deployment=os.getenv("ORCHESTRATOR_DEPLOYMENT_O1_MINI", "o1-mini"),
-                model="o1-mini"
+                deployment=f"{profile_prefix}-o1-mini-2024-09-12/deployments/o1-mini-2024-09-12",
+                model="o1-mini",
+                api_version="2024-12-01-preview",
+                headers={"x-tr-llm-profile-key": f"{profile_prefix}-o1-mini-2024-09-12"}
             ),
             "o3-mini": DeploymentConfig(
-                deployment=os.getenv("ORCHESTRATOR_DEPLOYMENT_O3_MINI", "o3-mini"),
-                model="o3-mini"
+                deployment=f"{profile_prefix}-o3-mini-2025-01-31/deployments/o3-mini-2025-01-31",
+                model="o3-mini",
+                api_version="2024-12-01-preview",
+                headers={"x-tr-llm-profile-key": f"{profile_prefix}-o3-mini-2025-01-31"}
             ),
             "o4-mini": DeploymentConfig(
-                deployment=os.getenv("ORCHESTRATOR_DEPLOYMENT_O4_MINI", "o4-mini"),
-                model="o4-mini"
+                deployment=f"{profile_prefix}-o4-mini-2025-04-16/deployments/o4-mini-2025-04-16",
+                model="o4-mini",
+                api_version="2024-12-01-preview",
+                headers={"x-tr-llm-profile-key": f"{profile_prefix}-o4-mini-2025-04-16"}
             ),
         }
 
@@ -80,6 +123,7 @@ def load_llm_config() -> LLMConfig:
             client_id=os.getenv("LEON_ORCHESTRATOR_CLIENT_ID"),
             client_secret=os.getenv("LEON_ORCHESTRATOR_CLIENT_SECRET"),
             resource=os.getenv("LEON_ORCHESTRATOR_RESOURCE"),
+            headers=global_headers,
             deployments=deployments
         )
 
