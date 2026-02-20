@@ -24,11 +24,11 @@ from tr_cdk_lib import TRCdk, NamingProps, OptionalTRTags
 from config.skills_registry import (
     SKILLS_REGISTRY,
     ENVIRONMENTS,
-    AWS_CONFIG,
-    CODESTAR_CONNECTION_ARN,
+    AWS_CONFIGS,
     GITHUB_CONFIG,
     get_skill_pipeline_name,
     get_skill_path_filter,
+    get_aws_config_for_environment,
     validate_registry,
 )
 from stacks.pipeline_stack import SkillPipelineStack
@@ -52,10 +52,10 @@ def main():
 
     # Create CDK app using tr_cdk_lib
     # deployment_env=None uses the default bootstrap (a207920-TrcdkToolkit)
-    # All skills share the same default bootstrap for this account/region
+    # asset_id and resource_owner are identical across accounts
     app = TRCdk.new_app(
-        asset_id=AWS_CONFIG["asset_id"],
-        resource_owner=AWS_CONFIG["resource_owner"],
+        asset_id=AWS_CONFIGS["preprod"]["asset_id"],
+        resource_owner=AWS_CONFIGS["preprod"]["resource_owner"],
         deployment_env=None,  # Use default bootstrap shared by all skills
         naming_props=NamingProps(prefix="spx"),  # Sphinx project prefix
         optional_tr_tags=optional_tr_tags,
@@ -77,6 +77,7 @@ def main():
                 continue
 
             env_config = ENVIRONMENTS[environment]
+            aws_config = get_aws_config_for_environment(environment)
 
             # Create unique construct ID for this pipeline
             # Format: urgent-drafting-dev-pipeline
@@ -91,14 +92,14 @@ def main():
                 environment=environment,
                 branch_name=env_config["branch"],
                 path_filters=get_skill_path_filter(skill_name),
-                codestar_connection_arn=CODESTAR_CONNECTION_ARN,
+                codestar_connection_arn=aws_config["codestar_connection_arn"],
                 github_owner=GITHUB_CONFIG["owner"],
                 github_repo=GITHUB_CONFIG["repo"],
                 require_approval=env_config["require_approval"],
                 notification_emails=notification_emails,
                 env=cdk.Environment(
-                    account=AWS_CONFIG["account"],
-                    region=AWS_CONFIG["region"],
+                    account=aws_config["account"],
+                    region=aws_config["region"],
                 ),
             )
 

@@ -6,7 +6,7 @@ To add a new skill:
 2. Run: cd cicd && cdk deploy --all
 3. Pipelines will be automatically created for all registered environments
 
-Each skill gets one pipeline per environment (dev, qa) with path-based triggers.
+Each skill gets one pipeline per environment (dev, qa, uat) with path-based triggers.
 """
 
 from typing import Dict, Any, List
@@ -15,7 +15,7 @@ from typing import Dict, Any, List
 SKILLS_REGISTRY: Dict[str, Dict[str, Any]] = {
     "urgent-drafting": {
         "path": "urgent-drafting",  # Path in repository
-        "environments": ["dev", "qa"],  # Environments to create pipelines for
+        "environments": ["dev", "qa", "uat"],  # Environments to create pipelines for
         "description": "Urgent drafting skill for Leon assistant",
         "notifications": {
             "emails": ["simranjit.kamboj@thomsonreuters.com", "michal.zarow@thomsonreuters.com"],  # Email addresses for deployment notifications
@@ -24,7 +24,7 @@ SKILLS_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
     "story-drafting": {
         "path": "story-drafting",  # Path in repository
-        "environments": ["dev", "qa"],  # Environments to create pipelines for
+        "environments": ["dev", "qa", "uat"],  # Environments to create pipelines for
         "description": "Story drafting skill for Leon assistant",
         "notifications": {
             "emails": ["simranjit.kamboj@thomsonreuters.com"],  # Email addresses for deployment notifications
@@ -55,6 +55,11 @@ ENVIRONMENTS: Dict[str, Dict[str, Any]] = {
         "require_approval": False,  # Auto-deploy without manual approval
         "description": "QA environment",
     },
+    "uat": {
+        "branch": "uat",  # Triggers on pushes to uat branch
+        "require_approval": False,  # Auto-deploy without manual approval
+        "description": "UAT environment (prod account)",
+    },
 }
 
 # AWS Configuration - Per-account configuration for multi-account deployment
@@ -66,14 +71,16 @@ AWS_CONFIGS = {
         "asset_id": "207920",
         "resource_owner": "iridium@trten.onmicrosoft.com",
         "environments": ["dev", "qa"],  # Environments in this account
+        "codestar_connection_arn": "arn:aws:codeconnections:eu-west-1:060725138335:connection/d39c32c7-a1b3-4033-a97c-be812c340906",
     },
     "prod": {
-        "account": "PROD_ACCOUNT_ID",  # To be filled when prod account is created
+        "account": "304853478528",
         "region": "eu-west-1",
         "profile": "tr-central-prod",
         "asset_id": "207920",
         "resource_owner": "iridium@trten.onmicrosoft.com",
-        "environments": ["prod"],  # Environments in this account
+        "environments": ["uat", "prod"],  # Environments in this account
+        "codestar_connection_arn": "arn:aws:codeconnections:eu-west-1:304853478528:connection/2d57c24a-267e-47de-9a03-8d1fb7f6a828",
     },
 }
 
@@ -114,7 +121,7 @@ def get_aws_config_for_environment(environment: str) -> Dict[str, Any]:
     Get AWS configuration for a specific environment.
 
     Args:
-        environment: Environment name (dev, qa, prod, etc.)
+        environment: Environment name (dev, qa, uat, prod, etc.)
 
     Returns:
         AWS configuration dict for the account that hosts this environment
@@ -130,6 +137,7 @@ def get_aws_config_for_environment(environment: str) -> Dict[str, Any]:
                 "profile": aws_config["profile"],
                 "asset_id": aws_config["asset_id"],
                 "resource_owner": aws_config["resource_owner"],
+                "codestar_connection_arn": aws_config["codestar_connection_arn"],
             }
 
     raise ValueError(
