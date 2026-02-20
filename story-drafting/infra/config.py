@@ -22,6 +22,7 @@ ENVIRONMENT_CONFIGS = {
         "cpu_target_utilization": 70,
         "memory_target_utilization": 70,
         "public_load_balancer": False,
+        "secrets_arn": "arn:aws:secretsmanager:eu-west-1:060725138335:secret:a207920-leon-skills-vWvmX7",
     },
     "qa": {
         "aws_account": "060725138335",
@@ -35,6 +36,7 @@ ENVIRONMENT_CONFIGS = {
         "cpu_target_utilization": 70,
         "memory_target_utilization": 70,
         "public_load_balancer": False,
+        "secrets_arn": "arn:aws:secretsmanager:eu-west-1:060725138335:secret:a207920-leon-skills-vWvmX7",
     },
     "staging": {
         "aws_account": "060725138335",
@@ -48,9 +50,10 @@ ENVIRONMENT_CONFIGS = {
         "cpu_target_utilization": 70,
         "memory_target_utilization": 70,
         "public_load_balancer": False,
+        "secrets_arn": "arn:aws:secretsmanager:eu-west-1:060725138335:secret:a207920-leon-skills-vWvmX7",
     },
-    "prod": {
-        "aws_account": "PROD_ACCOUNT_ID",  # To be filled when prod account is created
+    "uat": {
+        "aws_account": "304853478528",
         "aws_region": "eu-west-1",
         "aws_profile": "tr-central-prod",
         "cpu": 2048,
@@ -61,6 +64,21 @@ ENVIRONMENT_CONFIGS = {
         "cpu_target_utilization": 70,
         "memory_target_utilization": 70,
         "public_load_balancer": False,
+        "secrets_arn": "arn:aws:secretsmanager:eu-west-1:304853478528:secret:a207920-leon-skills-dxbeCU",
+    },
+    "prod": {
+        "aws_account": "304853478528",
+        "aws_region": "eu-west-1",
+        "aws_profile": "tr-central-prod",
+        "cpu": 2048,
+        "memory_mib": 4096,
+        "desired_count": 3,
+        "min_capacity": 3,
+        "max_capacity": 10,
+        "cpu_target_utilization": 70,
+        "memory_target_utilization": 70,
+        "public_load_balancer": False,
+        "secrets_arn": "arn:aws:secretsmanager:eu-west-1:304853478528:secret:a207920-leon-skills-dxbeCU",
     },
 }
 
@@ -108,6 +126,7 @@ class MCPConfig:
 
     # AWS Secrets Manager - orchestrator configuration (dynamically set)
     secrets_arn: str = field(init=False)
+    secret_name: str = field(init=False)
 
     # Tags
     project_name: str = "sphinx"
@@ -143,12 +162,11 @@ class MCPConfig:
         # Set ECR repository name with environment suffix
         self.ecr_repository_name = f"{self.resource_prefix}/{self.mcp_name}/{self.environment}"
 
-        # Set Secrets Manager ARN with full suffix (hardcoded for now)
-        # TODO: Make this environment-specific or use secret name lookup
-        self.secrets_arn = (
-            f"arn:aws:secretsmanager:{self.aws_region}:{self.aws_account}:"
-            f"secret:{self.resource_prefix}-leon-skills-vWvmX7"
-        )
+        # Set Secrets Manager secret name (used for cross-account lookup by name)
+        self.secret_name = f"{self.resource_prefix}-leon-skills"
+
+        # Set Secrets Manager ARN from environment config (includes the correct suffix per account)
+        self.secrets_arn = env_config["secrets_arn"]
 
         # Set SSM parameter prefix with environment
         self.ssm_parameter_prefix = f"/a207920/story-draft/{self.environment}"

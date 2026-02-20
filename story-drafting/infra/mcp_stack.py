@@ -107,7 +107,7 @@ class MCPStack(Stack):
                             effect=iam.Effect.ALLOW,
                             actions=["secretsmanager:GetSecretValue"],
                             resources=[
-                                f"{self.config.secrets_arn}"  # Full ARN with suffix
+                                self.config.secrets_arn
                             ]
                         )
                     ]
@@ -154,7 +154,7 @@ class MCPStack(Stack):
         # Get environment variables from config (from .env file)
         env_vars = self.config.get_environment_variables()
 
-        # Load orchestrator secrets from AWS Secrets Manager using full ARN
+        # Load orchestrator secrets from AWS Secrets Manager using exact ARN
         orchestrator_secret = secretsmanager.Secret.from_secret_complete_arn(
             self,
             "OrchestratorSecret",
