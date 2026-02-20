@@ -59,13 +59,13 @@ def load_llm_config() -> LLMConfig:
         global_headers = {
             "x-tr-chat-profile-name": os.getenv(
                 "ORCHESTRATOR_CHAT_PROFILE",
-                f"{profile_prefix}-Leon-Skills"
+                f"{profile_prefix}-Lynx-Editor-Online-NonProd"
             ),
             "x-tr-user-sensitivity": "blind",
-            "x-tr-userid": "Leon-Skills",
-            "x-tr-sessionid": "leon-skills-session",
+            "x-tr-userid": "Lynx-Editor-Online",
+            "x-tr-sessionid": "12345",
             "x-tr-asset-id": asset_id,
-            "x-tr-authorization": "leon-skills",
+            "x-tr-authorization": "abc",
         }
 
         # Resolve gpt-4-1 deployment and derive profile key from it

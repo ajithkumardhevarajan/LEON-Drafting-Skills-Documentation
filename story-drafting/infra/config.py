@@ -23,6 +23,7 @@ ENVIRONMENT_CONFIGS = {
         "memory_target_utilization": 70,
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:060725138335:secret:a207920-leon-skills-vWvmX7",
+        "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-NonProd",
     },
     "qa": {
         "aws_account": "060725138335",
@@ -37,6 +38,7 @@ ENVIRONMENT_CONFIGS = {
         "memory_target_utilization": 70,
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:060725138335:secret:a207920-leon-skills-vWvmX7",
+        "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-NonProd",
     },
     "staging": {
         "aws_account": "060725138335",
@@ -51,6 +53,7 @@ ENVIRONMENT_CONFIGS = {
         "memory_target_utilization": 70,
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:060725138335:secret:a207920-leon-skills-vWvmX7",
+        "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-NonProd",
     },
     "uat": {
         "aws_account": "304853478528",
@@ -65,6 +68,7 @@ ENVIRONMENT_CONFIGS = {
         "memory_target_utilization": 70,
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:304853478528:secret:a207920-leon-skills-dxbeCU",
+        "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-Prod",
     },
     "prod": {
         "aws_account": "304853478528",
@@ -79,6 +83,7 @@ ENVIRONMENT_CONFIGS = {
         "memory_target_utilization": 70,
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:304853478528:secret:a207920-leon-skills-dxbeCU",
+        "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-Prod",
     },
 }
 
@@ -168,6 +173,9 @@ class MCPConfig:
         # Set Secrets Manager ARN from environment config (includes the correct suffix per account)
         self.secrets_arn = env_config["secrets_arn"]
 
+        # Set orchestrator chat profile (NonProd vs Prod endpoint)
+        self.orchestrator_chat_profile = env_config["orchestrator_chat_profile"]
+
         # Set SSM parameter prefix with environment
         self.ssm_parameter_prefix = f"/a207920/story-draft/{self.environment}"
 
@@ -210,6 +218,7 @@ class MCPConfig:
             "MCP_SERVICE_NAME": self.service_name,
             "AWS_DEFAULT_REGION": self.aws_region,
             "MCP_PORT": str(self.container_port),
+            "ORCHESTRATOR_CHAT_PROFILE": self.orchestrator_chat_profile,
         }
 
         # Try to load all variables from .env file
