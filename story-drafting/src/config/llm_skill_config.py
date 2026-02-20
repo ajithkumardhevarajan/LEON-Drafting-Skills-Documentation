@@ -68,6 +68,15 @@ def load_llm_config() -> LLMConfig:
             "x-tr-authorization": "leon-skills",
         }
 
+        # Resolve gpt-4-1 deployment and derive profile key from it
+        # Profile key = {prefix}-{model_version} where model_version is after /deployments/
+        # e.g. "a209289-gpt-4-1-2025-04-14/deployments/gpt-4.1-2025-04-14" -> "a209289-gpt-4.1-2025-04-14"
+        _gpt4_1_deployment = os.getenv(
+            "ORCHESTRATOR_DEPLOYMENT_GPT4_1",
+            f"{profile_prefix}-gpt-4-1/deployments/gpt-4-1"
+        )
+        _gpt4_1_profile_key = f"{profile_prefix}-{_gpt4_1_deployment.split('/deployments/')[-1]}"
+
         # Deployment configurations matching the orchestrator setup
         deployments = {
             "gpt-4o": DeploymentConfig(
@@ -86,7 +95,7 @@ def load_llm_config() -> LLMConfig:
                 ),
                 model="gpt-4-1",
                 api_version="2025-01-01-preview",
-                headers={"x-tr-llm-profile-key": f"{profile_prefix}-gpt-4-1"}
+                headers={"x-tr-llm-profile-key": _gpt4_1_profile_key}
             ),
             "o1-mini": DeploymentConfig(
                 deployment=f"{profile_prefix}-o1-mini-2024-09-12/deployments/o1-mini-2024-09-12",
