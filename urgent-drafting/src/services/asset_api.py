@@ -25,7 +25,7 @@ async def search_assets(
     Returns:
         List of Asset objects
     """
-    api_url = "https://api.sphinx-test.thomsonreuters.com/search/v2/stories"
+    api_url = os.getenv("SPHINX_API_URL", "https://api.sphinx-test.thomsonreuters.com") + "/search/v2/stories"
     api_key = os.getenv("REUTERS_API_KEY", "")
 
     # GraphQL query for searching stories
@@ -89,8 +89,8 @@ async def search_assets(
         "accept-language": "en-CA,en-US;q=0.9,en;q=0.8",
         "authorization": f"Bearer {auth_token}",
         "content-type": "application/json",
-        "origin": "https://sphinx-qa.int.thomsonreuters.com",
-        "referer": "https://sphinx-qa.int.thomsonreuters.com/",
+        "origin": os.getenv("SPHINX_BASE_URL", "https://sphinx-qa.int.thomsonreuters.com"),
+        "referer": os.getenv("SPHINX_BASE_URL", "https://sphinx-qa.int.thomsonreuters.com") + "/",
         "sec-fetch-dest": "empty",
         "sec-fetch-mode": "cors",
         "sec-fetch-site": "same-site",
