@@ -284,8 +284,8 @@ class ArchiveSearchTool(BaseTool):
             )
 
         try:
-            # Create HTTP client with SSL verification disabled for QA environment
-            async with httpx.AsyncClient(verify=False) as client:
+            # Create HTTP client
+            async with httpx.AsyncClient() as client:
                 # Step 1: Fetch OAuth token
                 access_token = await self._fetch_oauth_token(client)
 
