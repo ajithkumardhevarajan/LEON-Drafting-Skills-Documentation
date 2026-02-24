@@ -31,6 +31,15 @@ SKILLS_REGISTRY: Dict[str, Dict[str, Any]] = {
             "enabled": True,  # Set to False to disable notifications for this skill
         },
     },
+    "text-archive": {
+        "path": "text-archive",  # Path in repository
+        "environments": ["dev", "qa", "uat"],  # Environments to create pipelines for
+        "description": "Reuters Text Archive search skill for Leon assistant",
+        "notifications": {
+            "emails": ["simranjit.kamboj@thomsonreuters.com"],
+            "enabled": True,
+        },
+    },
     # Add future skills here:
     # "future-skill": {
     #     "path": "future-skill",
