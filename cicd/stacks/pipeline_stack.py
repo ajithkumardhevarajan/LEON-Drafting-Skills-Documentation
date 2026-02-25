@@ -240,6 +240,7 @@ class SkillPipelineStack(Stack):
                     "ecr:CompleteLayerUpload",
                     "ecr:CreateRepository",
                     "ecr:DescribeRepositories",
+                    "ecr:TagResource",
                 ],
                 resources=["*"],
             )
