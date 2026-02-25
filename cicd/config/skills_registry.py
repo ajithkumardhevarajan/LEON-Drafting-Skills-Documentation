@@ -6,34 +6,35 @@ To add a new skill:
 2. Run: cd cicd && cdk deploy --all
 3. Pipelines will be automatically created for all registered environments
 
-Each skill gets one pipeline per environment (dev, qa, uat) with path-based triggers.
+Each skill gets one pipeline per environment.
+For prod, one pipeline deploys sequentially to euw1 then use1.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 # Skills registry - Add new skills here to create their pipelines
 SKILLS_REGISTRY: Dict[str, Dict[str, Any]] = {
     "urgent-drafting": {
-        "path": "urgent-drafting",  # Path in repository
-        "environments": ["dev", "qa", "uat"],  # Environments to create pipelines for
+        "path": "urgent-drafting",
+        "environments": ["dev", "qa", "uat", "prod"],
         "description": "Urgent drafting skill for Leon assistant",
         "notifications": {
-            "emails": ["simranjit.kamboj@thomsonreuters.com", "michal.zarow@thomsonreuters.com"],  # Email addresses for deployment notifications
-            "enabled": True,  # Set to False to disable notifications for this skill
+            "emails": ["simranjit.kamboj@thomsonreuters.com", "michal.zarow@thomsonreuters.com"],
+            "enabled": True,
         },
     },
     "story-drafting": {
-        "path": "story-drafting",  # Path in repository
-        "environments": ["dev", "qa", "uat"],  # Environments to create pipelines for
+        "path": "story-drafting",
+        "environments": ["dev", "qa", "uat"],
         "description": "Story drafting skill for Leon assistant",
         "notifications": {
-            "emails": ["simranjit.kamboj@thomsonreuters.com"],  # Email addresses for deployment notifications
-            "enabled": True,  # Set to False to disable notifications for this skill
+            "emails": ["simranjit.kamboj@thomsonreuters.com"],
+            "enabled": True,
         },
     },
     "text-archive": {
-        "path": "text-archive",  # Path in repository
-        "environments": ["dev", "qa", "uat"],  # Environments to create pipelines for
+        "path": "text-archive",
+        "environments": ["dev", "qa", "uat"],
         "description": "Reuters Text Archive search skill for Leon assistant",
         "notifications": {
             "emails": ["simranjit.kamboj@thomsonreuters.com"],
@@ -52,22 +53,41 @@ SKILLS_REGISTRY: Dict[str, Dict[str, Any]] = {
     # },
 }
 
-# Environment configuration - Defines branch triggers and approval requirements
+# Environment configuration - Defines branch triggers, approval requirements, and deploy targets
+#
+# deploy_stages (optional): ordered list of regions to deploy to within one pipeline.
+#   - Not set (single-region): pipeline deploys to its own region in one "Deploy" stage.
+#   - Set (multi-region, e.g. prod): pipeline deploys sequentially — euw1 first, then use1.
+#     Each entry maps to a DEPLOYMENT_ENV value that config.py inside the skill uses to
+#     resolve the target AWS account/region/secrets.
 ENVIRONMENTS: Dict[str, Dict[str, Any]] = {
     "dev": {
-        "branch": "develop",  # Triggers on pushes to develop branch
-        "require_approval": False,  # Auto-deploy without manual approval
+        "branch": "develop",
+        "require_approval": False,
         "description": "Development environment",
     },
     "qa": {
-        "branch": "qa",  # Triggers on pushes to qa branch
-        "require_approval": False,  # Auto-deploy without manual approval
+        "branch": "qa",
+        "require_approval": False,
         "description": "QA environment",
     },
     "uat": {
-        "branch": "uat",  # Triggers on pushes to uat branch
-        "require_approval": False,  # Auto-deploy without manual approval
-        "description": "UAT environment (prod account)",
+        "branch": "uat",
+        "require_approval": False,
+        "description": "UAT environment (prod account, euw1)",
+    },
+    "prod": {
+        "branch": "prod",
+        "require_approval": True,  # Manual approval gate before any deployment
+        "description": "Production environment — one pipeline, euw1 then use1 sequential",
+        # Ordered deploy stages: euw1 deploys and stabilises before use1 starts.
+        # 'environment' is the DEPLOYMENT_ENV value passed into the skill's CDK app
+        # (maps to ENVIRONMENT_CONFIGS in each skill's config.py).
+        # 'region' is the AWS region for that deploy stage's CDK stack and IAM policies.
+        "deploy_stages": [
+            {"environment": "prod-euw1", "region": "eu-west-1"},
+            {"environment": "prod-use1", "region": "us-east-1"},
+        ],
     },
 }
 
@@ -79,33 +99,30 @@ AWS_CONFIGS = {
         "profile": "tr-central-preprod",
         "asset_id": "207920",
         "resource_owner": "iridium@trten.onmicrosoft.com",
-        "environments": ["dev", "qa"],  # Environments in this account
+        "environments": ["dev", "qa"],
         "codestar_connection_arn": "arn:aws:codeconnections:eu-west-1:060725138335:connection/d39c32c7-a1b3-4033-a97c-be812c340906",
     },
     "prod": {
         "account": "304853478528",
-        "region": "eu-west-1",
+        "region": "eu-west-1",  # Pipeline infrastructure lives in euw1
         "profile": "tr-central-prod",
         "asset_id": "207920",
         "resource_owner": "iridium@trten.onmicrosoft.com",
-        "environments": ["uat", "prod"],  # Environments in this account
+        "environments": ["uat", "prod"],
         "codestar_connection_arn": "arn:aws:codeconnections:eu-west-1:304853478528:connection/2d57c24a-267e-47de-9a03-8d1fb7f6a828",
     },
 }
 
 # Default AWS config for backward compatibility
-# Uses preprod account (where dev/qa environments run)
 AWS_CONFIG = AWS_CONFIGS["preprod"]
 
 # CodeStar Connection for GitHub
-# Created in AWS Console: Developer Tools -> Connections
-# Format: arn:aws:codeconnections:region:account:connection/connection-id
 CODESTAR_CONNECTION_ARN = "arn:aws:codeconnections:eu-west-1:060725138335:connection/d39c32c7-a1b3-4033-a97c-be812c340906"
 
 # GitHub repository configuration
 GITHUB_CONFIG = {
-    "owner": "tr",  # GitHub organization/user
-    "repo": "sphinx_leon-assistant-skills",  # Repository name
+    "owner": "tr",
+    "repo": "sphinx_leon-assistant-skills",
 }
 
 
@@ -119,9 +136,7 @@ def get_skill_path_filter(skill_name: str) -> List[str]:
     skill_config = SKILLS_REGISTRY.get(skill_name)
     if not skill_config:
         raise ValueError(f"Skill {skill_name} not found in registry")
-
     skill_path = skill_config["path"]
-    # Trigger on any changes within the skill directory
     return [f"{skill_path}/**"]
 
 
@@ -129,11 +144,9 @@ def get_aws_config_for_environment(environment: str) -> Dict[str, Any]:
     """
     Get AWS configuration for a specific environment.
 
-    Args:
-        environment: Environment name (dev, qa, uat, prod, etc.)
-
-    Returns:
-        AWS configuration dict for the account that hosts this environment
+    Returns the account/region/profile/etc. for the pipeline infrastructure.
+    For prod, the pipeline itself lives in eu-west-1 even though it deploys to both
+    eu-west-1 and us-east-1 — the deploy_stages in ENVIRONMENTS handle that.
 
     Raises:
         ValueError: If environment is not configured in any AWS account
@@ -159,14 +172,12 @@ def validate_registry() -> None:
     """Validate the skills registry configuration."""
     errors = []
 
-    # Check each skill has required fields
     for skill_name, config in SKILLS_REGISTRY.items():
         if "path" not in config:
             errors.append(f"Skill '{skill_name}' missing 'path' field")
         if "environments" not in config:
             errors.append(f"Skill '{skill_name}' missing 'environments' field")
 
-        # Check environments are valid
         for env in config.get("environments", []):
             if env not in ENVIRONMENTS:
                 errors.append(
@@ -174,12 +185,15 @@ def validate_registry() -> None:
                     f"Valid environments: {', '.join(ENVIRONMENTS.keys())}"
                 )
 
-    # Validate AWS account configurations
-    all_configured_envs = [env for cfg in AWS_CONFIGS.values() for env in cfg.get("environments", [])]
+    # Every ENVIRONMENTS entry must be assigned to an AWS account
+    all_configured_envs = [
+        env for cfg in AWS_CONFIGS.values() for env in cfg.get("environments", [])
+    ]
     for env_name in ENVIRONMENTS.keys():
         if env_name not in all_configured_envs:
             errors.append(
-                f"Environment '{env_name}' is defined in ENVIRONMENTS but not assigned to any AWS account in AWS_CONFIGS"
+                f"Environment '{env_name}' is defined in ENVIRONMENTS but not assigned "
+                f"to any AWS account in AWS_CONFIGS"
             )
 
     if errors:

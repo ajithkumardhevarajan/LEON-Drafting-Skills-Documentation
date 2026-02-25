@@ -398,10 +398,17 @@ cdk_bootstrap() {
         exit 0
     fi
 
+    # Use PRODUCTION environment type for prod environments, DEVELOPMENT for all others
+    if [[ "$ENVIRONMENT" == prod* ]]; then
+        ENV_TYPE="PRODUCTION"
+    else
+        ENV_TYPE="DEVELOPMENT"
+    fi
+
     trcdk bootstrap aws://$AWS_ACCOUNT/$AWS_REGION \
         --asset-id "$ASSET_ID" \
         --resource-owner "iridium@trten.onmicrosoft.com" \
-        --environment-type "DEVELOPMENT"
+        --environment-type "$ENV_TYPE"
 
     if [[ $? -eq 0 ]]; then
         echo -e "${GREEN}✓ CDK environment bootstrapped successfully${NC}"

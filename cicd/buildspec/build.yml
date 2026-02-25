@@ -1,7 +1,8 @@
 version: 0.2
 
-# Build phase: Docker build and ECR push
-# Leverages existing deploy.sh script which handles everything
+# Build phase: Docker build and ECR push to euw1.
+# ECR replication (configured at the registry level) handles propagation to use1.
+# The deploy stage for each region runs cdk-deploy independently after replication.
 
 env:
   shell: bash
@@ -11,7 +12,6 @@ env:
 phases:
   install:
     commands:
-      # Install uv for fast Python package management
       - echo "Installing uv..."
       - curl -LsSf https://astral.sh/uv/install.sh | sh
       - source $HOME/.local/bin/env
@@ -29,7 +29,6 @@ phases:
 
       # Fetch JFrog credentials and build in SAME command block (env vars must be in same shell)
       - |
-        # Fetch JFrog credentials from SSM (same approach as deploy.yml)
         echo "Fetching JFrog credentials from SSM Parameter Store..."
         JFROG_USERNAME=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/username" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
         JFROG_TOKEN=$(aws ssm get-parameter --name "/a207920/leon-skills/jfrog/token" --with-decryption --query "Parameter.Value" --output text --region $AWS_DEFAULT_REGION)
@@ -50,7 +49,7 @@ phases:
         echo "Building Docker image..."
         ./deploy.sh build $ENVIRONMENT $IMAGE_TAG
 
-        # Push the same tag
+        # Push to euw1 ECR — ECR replication propagates to use1 automatically
         echo "Pushing Docker image to ECR..."
         ./deploy.sh push $ENVIRONMENT $IMAGE_TAG
 

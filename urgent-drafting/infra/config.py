@@ -78,7 +78,7 @@ ENVIRONMENT_CONFIGS = {
         "sphinx_base_url": "https://sphinx-uat.thomsonreuters.com",
         "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-Prod",
     },
-    "prod": {
+    "prod-euw1": {
         "aws_account": "304853478528",
         "aws_region": "eu-west-1",
         "aws_profile": "tr-central-prod",
@@ -94,6 +94,25 @@ ENVIRONMENT_CONFIGS = {
         "sphinx_api_url": "https://api.sphinx.thomsonreuters.com",
         "sphinx_base_url": "https://sphinx.thomsonreuters.com",
         "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-Prod",
+        "ecr_repository_name": "a207920/urgent-drafting-skill/prod",
+    },
+    "prod-use1": {
+        "aws_account": "304853478528",
+        "aws_region": "us-east-1",
+        "aws_profile": "tr-central-prod",
+        "cpu": 2048,
+        "memory_mib": 4096,
+        "desired_count": 3,
+        "min_capacity": 3,
+        "max_capacity": 10,
+        "cpu_target_utilization": 70,
+        "memory_target_utilization": 70,
+        "public_load_balancer": False,
+        "secrets_arn": "arn:aws:secretsmanager:us-east-1:304853478528:secret:a207920-leon-skills-dxbeCU",
+        "sphinx_api_url": "https://api.sphinx.thomsonreuters.com",
+        "sphinx_base_url": "https://sphinx.thomsonreuters.com",
+        "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-Prod",
+        "ecr_repository_name": "a207920/urgent-drafting-skill/prod",
     },
 }
 
@@ -174,8 +193,11 @@ class MCPConfig:
         self.memory_target_utilization = env_config["memory_target_utilization"]
         self.public_load_balancer = env_config["public_load_balancer"]
 
-        # Set ECR repository name with environment suffix
-        self.ecr_repository_name = f"{self.resource_prefix}/{self.mcp_name}/{self.environment}"
+        # Set ECR repository name — use explicit override if provided, otherwise derive from environment
+        if "ecr_repository_name" in env_config:
+            self.ecr_repository_name = env_config["ecr_repository_name"]
+        else:
+            self.ecr_repository_name = f"{self.resource_prefix}/{self.mcp_name}/{self.environment}"
 
         # Set Secrets Manager secret name (used for cross-account lookup by name)
         self.secret_name = f"{self.resource_prefix}-leon-skills"
