@@ -83,7 +83,9 @@ def main():
             # Format: urgent-drafting-dev-pipeline
             construct_id = f"{skill_name}-{environment}-pipeline"
 
-            # Create the pipeline stack
+            # Create the pipeline stack.
+            # deploy_stages is set for multi-region environments (e.g. prod).
+            # When present, one pipeline is created that deploys sequentially to all stages.
             pipeline_stack = SkillPipelineStack(
                 app,
                 construct_id,
@@ -97,6 +99,7 @@ def main():
                 github_repo=GITHUB_CONFIG["repo"],
                 require_approval=env_config["require_approval"],
                 notification_emails=notification_emails,
+                deploy_stages=env_config.get("deploy_stages"),
                 env=cdk.Environment(
                     account=aws_config["account"],
                     region=aws_config["region"],

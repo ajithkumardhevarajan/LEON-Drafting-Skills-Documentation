@@ -1,12 +1,14 @@
 """
 Reusable pipeline stack for deploying skills to ECS.
 
-Creates a 3-stage CodePipeline V2:
+Creates a CodePipeline V2:
 1. Source: GitHub with path-based filtering
-2. Build: Docker build + ECR push
-3. Deploy: CDK deploy to ECS
+2. Build: Docker build + ECR push (all target regions in one build)
+3. [Optional] Manual Approval
+4. Deploy stage(s): CDK deploy to ECS — one stage per region, sequential
 
-Each skill gets one stack per environment (e.g., urgent-drafting-dev, urgent-drafting-qa).
+Single-region (dev/qa/uat): one Deploy stage named "Deploy".
+Multi-region (prod): Deploy-EUW1 then Deploy-USE1 sequentially in one pipeline.
 """
 
 import aws_cdk as cdk
@@ -26,13 +28,20 @@ from aws_cdk import (
     Duration,
 )
 from constructs import Construct
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 
 class SkillPipelineStack(Stack):
     """
-    Pipeline stack for a single skill in a single environment.
-    Uses CodePipeline V2 with path-based filtering.
+    Pipeline stack for a single skill in a single pipeline environment.
+
+    Supports multi-region deployments via deploy_stages.
+    Example (prod): deploy_stages=[
+        {"environment": "prod-euw1", "region": "eu-west-1"},
+        {"environment": "prod-use1", "region": "us-east-1"},
+    ]
+    The build stage pushes the Docker image to every region's ECR.
+    Deploy stages run in order — euw1 fully completes before use1 starts.
     """
 
     def __init__(
@@ -49,6 +58,7 @@ class SkillPipelineStack(Stack):
         github_repo: str,
         require_approval: bool = False,
         notification_emails: Optional[List[str]] = None,
+        deploy_stages: Optional[List[Dict[str, str]]] = None,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -57,7 +67,14 @@ class SkillPipelineStack(Stack):
         self.skill_path = skill_path
         self.deploy_env = environment
 
-        # Create artifact bucket for pipeline
+        # Resolve effective deploy stages.
+        # Single-region (dev/qa/uat): not provided → defaults to pipeline's own region.
+        # Multi-region (prod): caller provides ordered list, e.g. euw1 then use1.
+        effective_deploy_stages: List[Dict[str, str]] = deploy_stages or [
+            {"environment": environment, "region": self.region}
+        ]
+
+        # ── Artifact bucket ────────────────────────────────────────────────────
         artifact_bucket = s3.Bucket(
             self,
             "ArtifactBucket",
@@ -67,7 +84,7 @@ class SkillPipelineStack(Stack):
             auto_delete_objects=False,
         )
 
-        # Create the pipeline (V2)
+        # ── Pipeline ───────────────────────────────────────────────────────────
         pipeline = codepipeline.Pipeline(
             self,
             "Pipeline",
@@ -77,7 +94,7 @@ class SkillPipelineStack(Stack):
             restart_execution_on_update=True,
         )
 
-        # Source stage - GitHub with path filtering
+        # ── Source stage ───────────────────────────────────────────────────────
         source_output = codepipeline.Artifact("SourceOutput")
         source_action = codepipeline_actions.CodeStarConnectionsSourceAction(
             action_name="GitHub_Source",
@@ -88,14 +105,9 @@ class SkillPipelineStack(Stack):
             connection_arn=codestar_connection_arn,
             trigger_on_push=True,
         )
+        pipeline.add_stage(stage_name="Source", actions=[source_action])
 
-        pipeline.add_stage(
-            stage_name="Source",
-            actions=[source_action],
-        )
-
-        # Add path-based trigger filter (V2 feature)
-        # This ensures only changes to this skill's directory trigger the pipeline
+        # Path-based trigger filter (V2 feature) — only fire on changes to this skill
         cfn_pipeline = pipeline.node.default_child
         cfn_pipeline.add_property_override(
             "Triggers",
@@ -106,12 +118,8 @@ class SkillPipelineStack(Stack):
                         "SourceActionName": "GitHub_Source",
                         "Push": [
                             {
-                                "Branches": {
-                                    "Includes": [branch_name],
-                                },
-                                "FilePaths": {
-                                    "Includes": path_filters,
-                                },
+                                "Branches": {"Includes": [branch_name]},
+                                "FilePaths": {"Includes": path_filters},
                             }
                         ],
                     },
@@ -119,61 +127,72 @@ class SkillPipelineStack(Stack):
             ],
         )
 
-        # Build stage - Docker build and push to ECR
+        # ── Build stage ────────────────────────────────────────────────────────
+        # Builds the Docker image once and pushes to all target regions' ECR repos.
         build_output = codepipeline.Artifact("BuildOutput")
-        build_project = self._create_build_project(skill_path, environment)
+        build_project = self._create_build_project(
+            skill_path, environment, effective_deploy_stages
+        )
         build_action = codepipeline_actions.CodeBuildAction(
             action_name="Docker_Build_Push",
             project=build_project,
             input=source_output,
             outputs=[build_output],
         )
+        pipeline.add_stage(stage_name="Build", actions=[build_action])
 
-        pipeline.add_stage(
-            stage_name="Build",
-            actions=[build_action],
-        )
-
-        # Optional manual approval
+        # ── Approval gate ──────────────────────────────────────────────────────
+        # Sits between Build and the first Deploy. Covers all regions for prod.
         if require_approval:
             approval_action = codepipeline_actions.ManualApprovalAction(
                 action_name="Manual_Approval",
                 additional_information=f"Approve deployment of {skill_name} to {environment}",
             )
-            pipeline.add_stage(
-                stage_name="Approval",
-                actions=[approval_action],
+            pipeline.add_stage(stage_name="Approval", actions=[approval_action])
+
+        # ── Deploy stages ──────────────────────────────────────────────────────
+        # One stage per region, sequential. For single-region → "Deploy".
+        # For multi-region → "Deploy-EUW1", "Deploy-USE1", etc.
+        deploy_stage_names: List[str] = []
+        for idx, stage_config in enumerate(effective_deploy_stages):
+            deploy_env = stage_config["environment"]
+            target_region = stage_config["region"]
+
+            if len(effective_deploy_stages) == 1:
+                stage_name = "Deploy"
+            else:
+                # "prod-euw1" → "Deploy-EUW1", "prod-use1" → "Deploy-USE1"
+                suffix = deploy_env.split("-")[-1].upper()
+                stage_name = f"Deploy-{suffix}"
+
+            deploy_stage_names.append(stage_name)
+
+            deploy_project = self._create_deploy_project(
+                skill_path, deploy_env, target_region, idx
             )
+            deploy_action = codepipeline_actions.CodeBuildAction(
+                action_name="CDK_Deploy",
+                project=deploy_project,
+                input=source_output,
+                extra_inputs=[build_output],
+            )
+            pipeline.add_stage(stage_name=stage_name, actions=[deploy_action])
 
-        # Deploy stage - CDK deploy
-        deploy_project = self._create_deploy_project(skill_path, environment)
-        deploy_action = codepipeline_actions.CodeBuildAction(
-            action_name="CDK_Deploy",
-            project=deploy_project,
-            input=source_output,
-            extra_inputs=[build_output],
-        )
-
-        pipeline.add_stage(
-            stage_name="Deploy",
-            actions=[deploy_action],
-        )
-
-        # Create notification infrastructure if emails are provided
+        # ── Notifications ──────────────────────────────────────────────────────
         if notification_emails and len(notification_emails) > 0:
             self._create_notification_infrastructure(
                 pipeline=pipeline,
                 notification_emails=notification_emails,
+                deploy_stage_names=deploy_stage_names,
             )
 
-        # Outputs
+        # ── Outputs ────────────────────────────────────────────────────────────
         cdk.CfnOutput(
             self,
             "PipelineName",
             value=pipeline.pipeline_name,
             description=f"Pipeline name for {skill_name} {environment}",
         )
-
         cdk.CfnOutput(
             self,
             "PipelineConsoleUrl",
@@ -181,20 +200,32 @@ class SkillPipelineStack(Stack):
             description="Console URL for the pipeline",
         )
 
-    def _create_build_project(self, skill_path: str, environment: str) -> codebuild.PipelineProject:
-        """Create CodeBuild project for Docker build and ECR push."""
+    # ── Private helpers ────────────────────────────────────────────────────────
 
-        # IAM role for build project
+    def _create_build_project(
+        self,
+        skill_path: str,
+        environment: str,
+        deploy_stages: List[Dict[str, str]],
+    ) -> codebuild.PipelineProject:
+        """
+        CodeBuild project: Docker build + ECR push to all target regions.
+
+        For multi-region prod, the primary ENVIRONMENT drives the first ECR push.
+        SECONDARY_DEPLOY_ENV / SECONDARY_DEPLOY_REGION drive the cross-region push
+        inside build.yml (see cicd/buildspec/build.yml).
+        """
         build_role = iam.Role(
             self,
             "BuildRole",
             assumed_by=iam.ServicePrincipal("codebuild.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEC2ContainerRegistryPowerUser"),
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "AmazonEC2ContainerRegistryPowerUser"
+                ),
             ],
         )
 
-        # Add ECR permissions
         build_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -214,20 +245,30 @@ class SkillPipelineStack(Stack):
             )
         )
 
-        # Add SSM permissions for JFrog credentials
+        # JFrog credentials live in the pipeline's own region (eu-west-1 for prod)
         build_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
-                actions=[
-                    "ssm:GetParameter",
-                    "ssm:GetParameters",
-                ],
+                actions=["ssm:GetParameter", "ssm:GetParameters"],
                 resources=[
                     f"arn:aws:ssm:{self.region}:{self.account}:parameter/a207920/leon-skills/jfrog/username",
                     f"arn:aws:ssm:{self.region}:{self.account}:parameter/a207920/leon-skills/jfrog/token",
                 ],
             )
         )
+
+        # ENVIRONMENT = primary deploy env (e.g. "prod-euw1") — drives ECR repo name and region.
+        # ECR replication (configured at registry level) propagates the image to use1
+        # automatically, so the build only needs to push once to the primary region.
+        primary_env = deploy_stages[0]["environment"]
+
+        env_vars = {
+            "SKILL_PATH": codebuild.BuildEnvironmentVariable(value=skill_path),
+            "ENVIRONMENT": codebuild.BuildEnvironmentVariable(value=primary_env),
+            "AWS_ACCOUNT_ID": codebuild.BuildEnvironmentVariable(value=self.account),
+            # AWS_DEFAULT_REGION stays as the pipeline region for SSM JFrog creds lookup
+            "AWS_DEFAULT_REGION": codebuild.BuildEnvironmentVariable(value=self.region),
+        }
 
         return codebuild.PipelineProject(
             self,
@@ -242,36 +283,44 @@ class SkillPipelineStack(Stack):
             build_spec=codebuild.BuildSpec.from_source_filename(
                 "cicd/buildspec/build.yml"
             ),
-            environment_variables={
-                "SKILL_PATH": codebuild.BuildEnvironmentVariable(value=skill_path),
-                "ENVIRONMENT": codebuild.BuildEnvironmentVariable(value=environment),
-                "AWS_ACCOUNT_ID": codebuild.BuildEnvironmentVariable(value=self.account),
-                "AWS_DEFAULT_REGION": codebuild.BuildEnvironmentVariable(value=self.region),
-            },
+            environment_variables=env_vars,
         )
 
-    def _create_deploy_project(self, skill_path: str, environment: str) -> codebuild.PipelineProject:
-        """Create CodeBuild project for CDK deployment."""
+    def _create_deploy_project(
+        self,
+        skill_path: str,
+        deploy_env: str,
+        target_region: str,
+        idx: int,
+    ) -> codebuild.PipelineProject:
+        """
+        CodeBuild project: CDK deploy for one specific region.
 
-        # IAM role for deploy project
+        deploy_env  — DEPLOYMENT_ENV value (e.g. "prod-euw1"), maps to region in config.py
+        target_region — AWS region the skill deploys to (drives IAM policy ARNs)
+        idx — 0-based index for unique CDK construct IDs in multi-stage pipelines
+        """
+        # Unique CDK construct ID suffix: idx=0 → "" (backward-compat), idx=1+ → "Use1", "Euw2", etc.
+        id_suffix = "" if idx == 0 else deploy_env.split("-")[-1].capitalize()
+
         deploy_role = iam.Role(
             self,
-            "DeployRole",
+            f"DeployRole{id_suffix}",
             assumed_by=iam.ServicePrincipal("codebuild.amazonaws.com"),
         )
 
-        # CloudFormation permissions for CDK deployment
+        # CloudFormation — scoped to target region
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["cloudformation:*"],
                 resources=[
-                    f"arn:aws:cloudformation:{self.region}:{self.account}:stack/a207920-spx-*",
+                    f"arn:aws:cloudformation:{target_region}:{self.account}:stack/a207920-spx-*",
                 ],
             )
         )
 
-        # IAM permissions for creating/managing service roles (NOT human-role/*)
+        # IAM — service roles only (NOT human-role/*)
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -296,7 +345,8 @@ class SkillPipelineStack(Stack):
             )
         )
 
-        # ECS permissions
+        # ECS, EC2, ELB, Auto Scaling, CloudWatch Logs — these are scoped by the CDK deploy
+        # context (region) so the broad resource ARNs are acceptable here
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -304,8 +354,6 @@ class SkillPipelineStack(Stack):
                 resources=["*"],
             )
         )
-
-        # EC2 permissions for VPC resources
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -326,8 +374,6 @@ class SkillPipelineStack(Stack):
                 resources=["*"],
             )
         )
-
-        # Elastic Load Balancing permissions
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -335,46 +381,35 @@ class SkillPipelineStack(Stack):
                 resources=["*"],
             )
         )
-
-        # SSM Parameter Store permissions
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
-                    "ssm:PutParameter",
-                    "ssm:GetParameter",
-                    "ssm:GetParameters",
-                    "ssm:DeleteParameter",
-                    "ssm:AddTagsToResource",
-                    "ssm:RemoveTagsFromResource",
+                    "application-autoscaling:RegisterScalableTarget",
+                    "application-autoscaling:DeregisterScalableTarget",
+                    "application-autoscaling:PutScalingPolicy",
+                    "application-autoscaling:DeleteScalingPolicy",
+                    "application-autoscaling:DescribeScalableTargets",
+                    "application-autoscaling:DescribeScalingPolicies",
                 ],
-                resources=[
-                    f"arn:aws:ssm:{self.region}:{self.account}:parameter/a207920/*",
-                ],
+                resources=["*"],
             )
         )
-
-        # S3 permissions for CDK staging and artifacts
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
-                    "s3:GetObject",
-                    "s3:PutObject",
-                    "s3:ListBucket",
-                    "s3:GetBucketLocation",
-                    "s3:GetBucketPolicy",
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents",
+                    "logs:DescribeLogGroups",
+                    "logs:PutRetentionPolicy",
+                    "logs:DeleteLogGroup",
+                    "logs:TagLogGroup",
                 ],
-                resources=[
-                    f"arn:aws:s3:::cdk-*-assets-{self.account}-{self.region}",
-                    f"arn:aws:s3:::cdk-*-assets-{self.account}-{self.region}/*",
-                    f"arn:aws:s3:::a207920-assets-{self.account}-{self.region}",
-                    f"arn:aws:s3:::a207920-assets-{self.account}-{self.region}/*",
-                ],
+                resources=["*"],
             )
         )
-
-        # ECR permissions (read images for deployment)
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -391,72 +426,101 @@ class SkillPipelineStack(Stack):
             )
         )
 
-        # Application Auto Scaling permissions
+        # SSM — target region for skill config params; pipeline region for JFrog creds
+        ssm_resources = [
+            f"arn:aws:ssm:{target_region}:{self.account}:parameter/a207920/*",
+        ]
+        if target_region != self.region:
+            ssm_resources.append(
+                f"arn:aws:ssm:{self.region}:{self.account}:parameter/a207920/*"
+            )
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
-                    "application-autoscaling:RegisterScalableTarget",
-                    "application-autoscaling:DeregisterScalableTarget",
-                    "application-autoscaling:PutScalingPolicy",
-                    "application-autoscaling:DeleteScalingPolicy",
-                    "application-autoscaling:DescribeScalableTargets",
-                    "application-autoscaling:DescribeScalingPolicies",
+                    "ssm:PutParameter",
+                    "ssm:GetParameter",
+                    "ssm:GetParameters",
+                    "ssm:DeleteParameter",
+                    "ssm:AddTagsToResource",
+                    "ssm:RemoveTagsFromResource",
                 ],
-                resources=["*"],
+                resources=ssm_resources,
             )
         )
 
-        # CloudWatch Logs permissions
+        # S3 — CDK bootstrap assets bucket in target region (+ pipeline region if cross-region)
+        s3_resources = [
+            f"arn:aws:s3:::cdk-*-assets-{self.account}-{target_region}",
+            f"arn:aws:s3:::cdk-*-assets-{self.account}-{target_region}/*",
+            f"arn:aws:s3:::a207920-assets-{self.account}-{target_region}",
+            f"arn:aws:s3:::a207920-assets-{self.account}-{target_region}/*",
+        ]
+        if target_region != self.region:
+            s3_resources += [
+                f"arn:aws:s3:::cdk-*-assets-{self.account}-{self.region}",
+                f"arn:aws:s3:::cdk-*-assets-{self.account}-{self.region}/*",
+                f"arn:aws:s3:::a207920-assets-{self.account}-{self.region}",
+                f"arn:aws:s3:::a207920-assets-{self.account}-{self.region}/*",
+            ]
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
-                    "logs:CreateLogGroup",
-                    "logs:CreateLogStream",
-                    "logs:PutLogEvents",
-                    "logs:DescribeLogGroups",
-                    "logs:PutRetentionPolicy",
-                    "logs:DeleteLogGroup",
-                    "logs:TagLogGroup",
+                    "s3:GetObject",
+                    "s3:PutObject",
+                    "s3:ListBucket",
+                    "s3:GetBucketLocation",
+                    "s3:GetBucketPolicy",
                 ],
-                resources=["*"],
+                resources=s3_resources,
             )
         )
 
-        # STS AssumeRole for TR CDK bootstrap roles (from a207920-CdkToolkit stack)
+        # STS — TR CDK bootstrap roles in target region (+ pipeline region for cross-region)
+        sts_resources = [
+            f"arn:aws:iam::{self.account}:role/service-role/a207920-dr-{self.account}-{target_region}",
+            f"arn:aws:iam::{self.account}:role/service-role/a207920-fpr-{self.account}-{target_region}",
+            f"arn:aws:iam::{self.account}:role/service-role/a207920-ipr-{self.account}-{target_region}",
+            f"arn:aws:iam::{self.account}:role/service-role/a207920-lr-{self.account}-{target_region}",
+            f"arn:aws:iam::{self.account}:role/a207920-TrcdkToolkit-*",
+            f"arn:aws:iam::{self.account}:role/a207920-CdkToolkit-*",
+        ]
+        if target_region != self.region:
+            sts_resources += [
+                f"arn:aws:iam::{self.account}:role/service-role/a207920-dr-{self.account}-{self.region}",
+                f"arn:aws:iam::{self.account}:role/service-role/a207920-fpr-{self.account}-{self.region}",
+                f"arn:aws:iam::{self.account}:role/service-role/a207920-ipr-{self.account}-{self.region}",
+                f"arn:aws:iam::{self.account}:role/service-role/a207920-lr-{self.account}-{self.region}",
+            ]
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["sts:AssumeRole"],
-                resources=[
-                    # TR CDK bootstrap roles
-                    f"arn:aws:iam::{self.account}:role/service-role/a207920-dr-{self.account}-{self.region}",
-                    f"arn:aws:iam::{self.account}:role/service-role/a207920-fpr-{self.account}-{self.region}",
-                    f"arn:aws:iam::{self.account}:role/service-role/a207920-ipr-{self.account}-{self.region}",
-                    f"arn:aws:iam::{self.account}:role/service-role/a207920-lr-{self.account}-{self.region}",
-                    # Also support CDK toolkit roles
-                    f"arn:aws:iam::{self.account}:role/a207920-TrcdkToolkit-*",
-                    f"arn:aws:iam::{self.account}:role/a207920-CdkToolkit-*",
-                ],
+                resources=sts_resources,
             )
         )
 
-        # PassRole for CloudFormation execution role
+        # PassRole — CloudFormation execution role in target region
+        cfn_er_resources = [
+            f"arn:aws:iam::{self.account}:role/service-role/a207920-cfn-er-{self.account}-{target_region}",
+        ]
+        if target_region != self.region:
+            cfn_er_resources.append(
+                f"arn:aws:iam::{self.account}:role/service-role/a207920-cfn-er-{self.account}-{self.region}"
+            )
         deploy_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["iam:PassRole"],
-                resources=[
-                    f"arn:aws:iam::{self.account}:role/service-role/a207920-cfn-er-{self.account}-{self.region}",
-                ],
+                resources=cfn_er_resources,
             )
         )
 
         return codebuild.PipelineProject(
             self,
-            "DeployProject",
-            project_name=f"{self.skill_name}-{environment}-deploy",
+            f"DeployProject{id_suffix}",
+            project_name=f"{self.skill_name}-{deploy_env}-deploy",
             role=deploy_role,
             environment=codebuild.BuildEnvironment(
                 build_image=codebuild.LinuxBuildImage.AMAZON_LINUX_2_ARM_3,
@@ -467,7 +531,10 @@ class SkillPipelineStack(Stack):
             ),
             environment_variables={
                 "SKILL_PATH": codebuild.BuildEnvironmentVariable(value=skill_path),
-                "ENVIRONMENT": codebuild.BuildEnvironmentVariable(value=environment),
+                # ENVIRONMENT drives DEPLOYMENT_ENV in deploy.sh → config.py → correct region
+                "ENVIRONMENT": codebuild.BuildEnvironmentVariable(value=deploy_env),
+                # AWS_DEFAULT_REGION stays as pipeline region so JFrog SSM lookup works
+                "AWS_DEFAULT_REGION": codebuild.BuildEnvironmentVariable(value=self.region),
             },
         )
 
@@ -475,6 +542,7 @@ class SkillPipelineStack(Stack):
         self,
         pipeline: codepipeline.Pipeline,
         notification_emails: List[str],
+        deploy_stage_names: List[str],
     ) -> None:
         """
         Create notification infrastructure for deployment events.
@@ -482,13 +550,9 @@ class SkillPipelineStack(Stack):
         Creates:
         - SNS topic with email subscriptions
         - Lambda function to enrich notifications
-        - EventBridge rules to trigger on Deploy stage completion
-
-        Args:
-            pipeline: The CodePipeline to monitor
-            notification_emails: List of email addresses to notify
+        - EventBridge rules that watch all deploy stage names (for multi-region prod,
+          both Deploy-EUW1 and Deploy-USE1 trigger notifications)
         """
-        # Create SNS topic
         notification_topic = sns.Topic(
             self,
             "NotificationTopic",
@@ -496,13 +560,11 @@ class SkillPipelineStack(Stack):
             display_name=f"Deployment notifications for {self.skill_name} {self.deploy_env}",
         )
 
-        # Add email subscriptions
         for email in notification_emails:
             notification_topic.add_subscription(
                 sns_subscriptions.EmailSubscription(email)
             )
 
-        # Create IAM role for Lambda with explicit short name
         lambda_role = iam.Role(
             self,
             "NotificationLambdaRole",
@@ -515,7 +577,6 @@ class SkillPipelineStack(Stack):
             ],
         )
 
-        # Create Lambda function for notification enrichment
         notification_lambda = lambda_.Function(
             self,
             "NotificationHandler",
@@ -532,10 +593,8 @@ class SkillPipelineStack(Stack):
             },
         )
 
-        # Grant Lambda permissions to publish to SNS
         notification_topic.grant_publish(lambda_role)
 
-        # Allow Lambda to read pipeline execution details
         lambda_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -548,61 +607,51 @@ class SkillPipelineStack(Stack):
             )
         )
 
-        # Allow Lambda to read artifacts from S3
         lambda_role.add_to_policy(
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
-                actions=[
-                    "s3:GetObject",
-                    "s3:GetObjectVersion",
-                ],
-                resources=[
-                    f"{pipeline.artifact_bucket.bucket_arn}/*",
-                ],
+                actions=["s3:GetObject", "s3:GetObjectVersion"],
+                resources=[f"{pipeline.artifact_bucket.bucket_arn}/*"],
             )
         )
 
-        # EventBridge rule for Deploy stage SUCCESS
+        # EventBridge rules match all deploy stage names.
+        # For multi-region prod: ["Deploy-EUW1", "Deploy-USE1"] — each region completion
+        # fires its own notification so you can track per-region success/failure.
         success_rule = events.Rule(
             self,
             "DeploymentSuccessRule",
             rule_name=f"{self.skill_name}-{self.deploy_env}-deploy-success",
-            description=f"Notify on {self.skill_name} {self.deploy_env} Deploy stage success",
+            description=f"Notify on {self.skill_name} {self.deploy_env} deploy stage success",
             event_pattern=events.EventPattern(
                 source=["aws.codepipeline"],
                 detail_type=["CodePipeline Stage Execution State Change"],
                 detail={
                     "pipeline": [pipeline.pipeline_name],
-                    "stage": ["Deploy"],
+                    "stage": deploy_stage_names,
                     "state": ["SUCCEEDED"],
                 },
             ),
         )
-
-        # Add targets: Lambda for enrichment
         success_rule.add_target(events_targets.LambdaFunction(notification_lambda))
 
-        # EventBridge rule for Deploy stage FAILURE
         failure_rule = events.Rule(
             self,
             "DeploymentFailureRule",
             rule_name=f"{self.skill_name}-{self.deploy_env}-deploy-failure",
-            description=f"Notify on {self.skill_name} {self.deploy_env} Deploy stage failure",
+            description=f"Notify on {self.skill_name} {self.deploy_env} deploy stage failure",
             event_pattern=events.EventPattern(
                 source=["aws.codepipeline"],
                 detail_type=["CodePipeline Stage Execution State Change"],
                 detail={
                     "pipeline": [pipeline.pipeline_name],
-                    "stage": ["Deploy"],
+                    "stage": deploy_stage_names,
                     "state": ["FAILED"],
                 },
             ),
         )
-
-        # Add targets: Lambda for enrichment
         failure_rule.add_target(events_targets.LambdaFunction(notification_lambda))
 
-        # Output
         cdk.CfnOutput(
             self,
             "NotificationTopicArn",

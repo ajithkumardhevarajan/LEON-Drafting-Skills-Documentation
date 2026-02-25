@@ -25,7 +25,7 @@ SKILLS_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
     "story-drafting": {
         "path": "story-drafting",
-        "environments": ["dev", "qa", "uat"],
+        "environments": ["dev", "qa", "uat", "prod"],
         "description": "Story drafting skill for Leon assistant",
         "notifications": {
             "emails": ["simranjit.kamboj@thomsonreuters.com"],
