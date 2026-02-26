@@ -80,6 +80,36 @@ ENVIRONMENT_CONFIGS = {
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:304853478528:secret:a207920-leon-skills-dxbeCU",
     },
+    "prod-euw1": {
+        "aws_account": "304853478528",
+        "aws_region": "eu-west-1",
+        "aws_profile": "tr-central-prod",
+        "cpu": 2048,
+        "memory_mib": 4096,
+        "desired_count": 3,
+        "min_capacity": 3,
+        "max_capacity": 10,
+        "cpu_target_utilization": 70,
+        "memory_target_utilization": 70,
+        "public_load_balancer": False,
+        "secrets_arn": "arn:aws:secretsmanager:eu-west-1:304853478528:secret:a207920-leon-skills-dxbeCU",
+        "ecr_repository_name": "a207920/text-archive-skill/prod",
+    },
+    "prod-use1": {
+        "aws_account": "304853478528",
+        "aws_region": "us-east-1",
+        "aws_profile": "tr-central-prod",
+        "cpu": 2048,
+        "memory_mib": 4096,
+        "desired_count": 3,
+        "min_capacity": 3,
+        "max_capacity": 10,
+        "cpu_target_utilization": 70,
+        "memory_target_utilization": 70,
+        "public_load_balancer": False,
+        "secrets_arn": "arn:aws:secretsmanager:us-east-1:304853478528:secret:a207920-leon-skills-dxbeCU",
+        "ecr_repository_name": "a207920/text-archive-skill/prod",
+    },
 }
 
 
@@ -159,8 +189,11 @@ class MCPConfig:
         self.memory_target_utilization = env_config["memory_target_utilization"]
         self.public_load_balancer = env_config["public_load_balancer"]
 
-        # Set ECR repository name with environment suffix
-        self.ecr_repository_name = f"{self.resource_prefix}/{self.mcp_name}/{self.environment}"
+        # Set ECR repository name - use override if provided (prod-euw1/prod-use1 share one repo)
+        if "ecr_repository_name" in env_config:
+            self.ecr_repository_name = env_config["ecr_repository_name"]
+        else:
+            self.ecr_repository_name = f"{self.resource_prefix}/{self.mcp_name}/{self.environment}"
 
         # Set Secrets Manager secret name (used for cross-account lookup by name)
         self.secret_name = f"{self.resource_prefix}-leon-skills"

@@ -34,7 +34,7 @@ SKILLS_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
     "text-archive": {
         "path": "text-archive",
-        "environments": ["dev", "qa", "uat"],
+        "environments": ["dev", "qa", "uat", "prod"],
         "description": "Reuters Text Archive search skill for Leon assistant",
         "notifications": {
             "emails": ["simranjit.kamboj@thomsonreuters.com"],
