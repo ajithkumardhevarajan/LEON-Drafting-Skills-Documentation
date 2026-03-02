@@ -57,8 +57,11 @@ class GenerateUrgentDraftTool(BaseTool):
         return {
             "usn": {
                 "type": "string",
-                "description": "Pre-selected USN from context. You always must pass this parameter. Example format: EMQ8BGO4Q",
-                "required": True
+                "description": "USN of the news flash to draft from. Extract from context if available, otherwise pass empty string and the user will be prompted. Example format: EMQ8BGO4Q",
+                "required": True,
+                "ui_metadata": {
+                    "help_text": "I'd be happy to help you draft an urgent. Please provide the USN reference for the news flash you'd like to work with."
+                }
             },
             "asset_id": {
                 "type": "string",
