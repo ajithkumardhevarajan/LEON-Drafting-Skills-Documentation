@@ -12,7 +12,7 @@ phases:
   install:
     runtime-versions:
       python: 3.11
-      nodejs: 20
+      nodejs: 22
     commands:
       # Install uv for fast Python package management
       - echo "Installing uv..."
