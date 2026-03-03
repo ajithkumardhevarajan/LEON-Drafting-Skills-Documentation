@@ -108,7 +108,7 @@ async def handle_refinement(
 
         refine_raw = interrupt({
             "type": INTERRUPT_TYPE_REFINEMENT,
-            "message": "What specific changes would you like?",
+            "message": "Could you provide specific feedback or changes you'd like to see in the urgent draft? This will help me refine it to better meet your needs.",
             "current_headline": current_headline,
             "current_body": current_body
         })
