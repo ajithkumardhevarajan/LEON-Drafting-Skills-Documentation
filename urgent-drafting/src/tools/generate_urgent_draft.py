@@ -18,11 +18,11 @@ from ..services.intent_interpreter import IntentInterpreter
 from .urgent_helpers import format_urgent_sources
 from .urgent_actions import (
     generate_urgent_content,
-    handle_refinement,
     handle_regeneration,
     retrieve_and_prepare_assets,
     apply_asset_reordering,
 )
+from .urgent_actions.refine import refine_urgent_content
 from .urgent_actions.constants import (
     ACTION_APPROVE,
     ACTION_INSERT,
@@ -30,6 +30,7 @@ from .urgent_actions.constants import (
     ACTION_REFINE,
     ACTION_CANCEL,
     INTERRUPT_TYPE_REVIEW,
+    INTERRUPT_TYPE_REFINEMENT,
 )
 
 logger = logging.getLogger(__name__)
@@ -110,8 +111,8 @@ class GenerateUrgentDraftTool(BaseTool):
     def _handle_regeneration(self, feedback, original_assets):
         return handle_regeneration(feedback, original_assets)
 
-    async def _handle_refinement(self, feedback, current_headline, current_body, assets, llm):
-        return await handle_refinement(feedback, current_headline, current_body, assets, llm)
+    async def _refine_urgent_content(self, headline, body, instructions, assets, llm):
+        return await refine_urgent_content(headline, body, instructions, assets, llm)
 
     @resumable
     async def execute(self, arguments: Dict[str, Any], jwt_token: str) -> ToolResult:
@@ -237,20 +238,34 @@ class GenerateUrgentDraftTool(BaseTool):
             elif action == ACTION_REFINE:
                 logger.info("User requested refinement")
 
-                # Handle refinement (asset ordering already updated above)
-                refined_headline, refined_body, refined_urgent = await self._handle_refinement(
-                    review_feedback,
-                    current_headline,
-                    current_body,
-                    selectable_assets,
-                    llm
-                )
+                # Get refinement instructions - check if interpreter already extracted them.
+                # The interrupt is fired inline here (not inside a memoized method) so that
+                # the @resumable decorator tracks it correctly and the resume_values queue
+                # stays in sync on replay.
+                instructions = review_feedback.get("instructions", "")
 
-                # Update state if refinement succeeded
-                if refined_urgent:
-                    current_headline = refined_headline
-                    current_body = refined_body
-                    current_urgent = refined_urgent
+                if not instructions:
+                    logger.info("No instructions provided, requesting from user")
+                    refine_raw = interrupt({
+                        "type": INTERRUPT_TYPE_REFINEMENT,
+                        "message": "Could you provide specific feedback or changes you'd like to see in the urgent draft? This will help me refine it to better meet your needs.",
+                        "current_headline": current_headline,
+                        "current_body": current_body
+                    })
+                    instructions = str(refine_raw)
+
+                if instructions:
+                    logger.info(f"Refining with instructions: {instructions[:100]}...")
+                    try:
+                        refined_headline, refined_body, refined_urgent = await self._refine_urgent_content(
+                            current_headline, current_body, instructions, selectable_assets, llm
+                        )
+                        if refined_urgent:
+                            current_headline = refined_headline
+                            current_body = refined_body
+                            current_urgent = refined_urgent
+                    except Exception as e:
+                        logger.error(f"Refinement failed: {str(e)}")
 
             elif action == ACTION_CANCEL:
                 logger.info("User cancelled the workflow")
@@ -260,11 +275,8 @@ class GenerateUrgentDraftTool(BaseTool):
                 # Unknown action - treat as refinement request
                 logger.warning(f"Unknown action '{action}', treating as refinement")
 
-                # Import refine_urgent_content for unknown actions
-                from .urgent_actions.refine import refine_urgent_content
-
                 try:
-                    current_headline, current_body, current_urgent = await refine_urgent_content(
+                    current_headline, current_body, current_urgent = await self._refine_urgent_content(
                         current_headline,
                         current_body,
                         str(review_raw),
