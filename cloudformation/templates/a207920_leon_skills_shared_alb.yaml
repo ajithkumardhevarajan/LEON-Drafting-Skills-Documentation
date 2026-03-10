@@ -266,6 +266,12 @@ Resources:
       Actions:
         - Type: forward
           TargetGroupArn: !Ref UrgentDraftingTargetGroup
+      Transforms:
+        - Type: url-rewrite
+          UrlRewriteConfig:
+            Rewrites:
+              - Regex: '^/urgent-drafting(.*)'
+                Replace: '$1'
 
   StoryDraftingListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
@@ -281,6 +287,12 @@ Resources:
       Actions:
         - Type: forward
           TargetGroupArn: !Ref StoryDraftingTargetGroup
+      Transforms:
+        - Type: url-rewrite
+          UrlRewriteConfig:
+            Rewrites:
+              - Regex: '^/story-drafting(.*)'
+                Replace: '$1'
 
   TextArchiveListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
@@ -296,6 +308,12 @@ Resources:
       Actions:
         - Type: forward
           TargetGroupArn: !Ref TextArchiveTargetGroup
+      Transforms:
+        - Type: url-rewrite
+          UrlRewriteConfig:
+            Rewrites:
+              - Regex: '^/text-archive(.*)'
+                Replace: '$1'
 
   # ── Route53 ALIAS record ───────────────────────────────────────────────────
   # Private hosted zone: 8335.aws-int.thomsonreuters.com (Z1GFVCPGDV59FR)
