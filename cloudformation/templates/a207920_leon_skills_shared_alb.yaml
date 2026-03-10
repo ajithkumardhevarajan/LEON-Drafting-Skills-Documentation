@@ -366,4 +366,3 @@ Outputs:
     Value: !Ref TextArchiveTargetGroup
     Export:
       Name: !Sub '${AWS::StackName}-tg-text-archive'
-      Name: !Sub '${AWS::StackName}-tg-text-archive'
