@@ -5,7 +5,7 @@ Configuration for text-archive MCP deployment to AWS ECS.
 import os
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 # Environment-specific configuration
@@ -23,6 +23,7 @@ ENVIRONMENT_CONFIGS = {
         "memory_target_utilization": 70,
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:060725138335:secret:a207920-leon-skills-vWvmX7",
+        "shared_alb_tg_cf_export": "a207920-leon-skills-shared-alb-ci-tg-text-archive",
     },
     "qa": {
         "aws_account": "060725138335",
@@ -37,6 +38,7 @@ ENVIRONMENT_CONFIGS = {
         "memory_target_utilization": 70,
         "public_load_balancer": False,
         "secrets_arn": "arn:aws:secretsmanager:eu-west-1:060725138335:secret:a207920-leon-skills-vWvmX7",
+        "shared_alb_tg_cf_export": "a207920-leon-skills-shared-alb-test-tg-text-archive",
     },
     "staging": {
         "aws_account": "060725138335",
@@ -162,6 +164,9 @@ class MCPConfig:
     project_name: str = "sphinx"
     service_full_name: str = "sphinx-text-archive-skill"
 
+    # Optional: shared ALB target group CF export (POC: ci/test only)
+    shared_alb_tg_cf_export: Optional[str] = None
+
     def __post_init__(self):
         """Initialize environment-specific configuration after dataclass initialization"""
         # Validate environment
@@ -203,6 +208,9 @@ class MCPConfig:
 
         # Set SSM parameter prefix with environment
         self.ssm_parameter_prefix = f"/a207920/text-archive/{self.environment}"
+
+        # Load optional shared ALB target group CF export (POC: ci/test only)
+        self.shared_alb_tg_cf_export = env_config.get("shared_alb_tg_cf_export")
 
     def get_stack_name(self) -> str:
         """Get the CDK stack name"""

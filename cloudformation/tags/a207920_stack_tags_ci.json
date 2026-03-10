@@ -1,0 +1,26 @@
+[
+    {
+        "Key": "tr:financial-identifier",
+        "Value": "500001328"
+    },
+    {
+        "Key": "tr:application-asset-insight-id",
+        "Value": "207920"
+    },
+    {
+        "Key": "tr:environment-type",
+        "Value": "DEVELOPMENT"
+    },
+    {
+        "Key": "tr:environment-name",
+        "Value": "ci"
+    },
+    {
+        "Key": "tr:resource-owner",
+        "Value": "iridium@trten.onmicrosoft.com"
+    },
+    {
+        "Key": "tr:service-name",
+        "Value": "skills"
+    }
+]

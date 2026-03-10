@@ -5,7 +5,7 @@ Configuration for urgent-drafting MCP deployment to AWS ECS.
 import os
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 # Environment-specific configuration
@@ -26,6 +26,7 @@ ENVIRONMENT_CONFIGS = {
         "sphinx_api_url": "https://api.sphinx-test.thomsonreuters.com",
         "sphinx_base_url": "https://sphinx-test.thomsonreuters.com",
         "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-NonProd",
+        "shared_alb_tg_cf_export": "a207920-leon-skills-shared-alb-ci-tg-urgent",
     },
     "qa": {
         "aws_account": "060725138335",
@@ -43,6 +44,7 @@ ENVIRONMENT_CONFIGS = {
         "sphinx_api_url": "https://api.sphinx-test.thomsonreuters.com",
         "sphinx_base_url": "https://sphinx-test.thomsonreuters.com",
         "orchestrator_chat_profile": "a209289-Lynx-Editor-Online-NonProd",
+        "shared_alb_tg_cf_export": "a207920-leon-skills-shared-alb-test-tg-urgent",
     },
     "staging": {
         "aws_account": "060725138335",
@@ -166,6 +168,9 @@ class MCPConfig:
     project_name: str = "sphinx"
     service_full_name: str = "sphinx-urgent-drafting-skill"
 
+    # Optional: shared ALB target group CF export (POC: ci/test only)
+    shared_alb_tg_cf_export: Optional[str] = None
+
     def __post_init__(self):
         """Initialize environment-specific configuration after dataclass initialization"""
         # Validate environment
@@ -214,6 +219,9 @@ class MCPConfig:
 
         # Set orchestrator chat profile (NonProd vs Prod endpoint)
         self.orchestrator_chat_profile = env_config["orchestrator_chat_profile"]
+
+        # Load optional shared ALB target group CF export (POC: ci/test only)
+        self.shared_alb_tg_cf_export = env_config.get("shared_alb_tg_cf_export")
 
     def get_stack_name(self) -> str:
         """Get the CDK stack name"""
