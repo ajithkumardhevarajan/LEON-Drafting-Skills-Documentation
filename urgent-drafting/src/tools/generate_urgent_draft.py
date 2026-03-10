@@ -210,6 +210,14 @@ class GenerateUrgentDraftTool(BaseTool):
             action = review_feedback.get("action")
             logger.info(f"User action: {action}")
 
+            # Always capture user's asset ordering/inclusion changes before handling any action.
+            # The review interrupt lets users reorder and uncheck alerts for any action (not just
+            # regenerate), so we must store that state here so it survives the refinement
+            # instructions interrupt and subsequent replays.
+            new_assets = self._handle_regeneration(review_feedback, selectable_assets_original)
+            if new_assets:
+                selectable_assets = new_assets
+
             # Handle user actions
             if action in [ACTION_APPROVE, ACTION_INSERT]:
                 logger.info("Urgent approved by user")
@@ -221,12 +229,7 @@ class GenerateUrgentDraftTool(BaseTool):
             elif action == ACTION_REGENERATE:
                 logger.info("User requested regeneration")
 
-                # Update asset selection if provided
-                new_assets = self._handle_regeneration(review_feedback, selectable_assets_original)
-                if new_assets:
-                    selectable_assets = new_assets
-
-                # Clear state to force regeneration
+                # Clear state to force regeneration (asset ordering already updated above)
                 current_urgent = None
                 current_headline = None
                 current_body = None
@@ -234,13 +237,7 @@ class GenerateUrgentDraftTool(BaseTool):
             elif action == ACTION_REFINE:
                 logger.info("User requested refinement")
 
-                # Preserve asset ordering if user reordered before refining
-                # Mirrors the regenerate flow so ordering changes are never lost
-                new_assets = self._handle_regeneration(review_feedback, selectable_assets_original)
-                if new_assets:
-                    selectable_assets = new_assets
-
-                # Handle refinement
+                # Handle refinement (asset ordering already updated above)
                 refined_headline, refined_body, refined_urgent = await self._handle_refinement(
                     review_feedback,
                     current_headline,
