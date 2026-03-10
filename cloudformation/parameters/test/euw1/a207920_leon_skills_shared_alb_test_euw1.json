@@ -1,0 +1,26 @@
+[
+  {
+    "ParameterKey": "VpcId",
+    "ParameterValue": "vpc-51c3e835"
+  },
+  {
+    "ParameterKey": "SubnetIds",
+    "ParameterValue": "subnet-9dace9c5,subnet-31447c55,subnet-47714e31"
+  },
+  {
+    "ParameterKey": "EnvironmentName",
+    "ParameterValue": "test"
+  },
+  {
+    "ParameterKey": "ApplicationAssetInsightIdTag",
+    "ParameterValue": "207920"
+  },
+  {
+    "ParameterKey": "ResourceOwnerTag",
+    "ParameterValue": "iridium@trten.onmicrosoft.com"
+  },
+  {
+    "ParameterKey": "DnsHostname",
+    "ParameterValue": "skills.leon-test"
+  }
+]

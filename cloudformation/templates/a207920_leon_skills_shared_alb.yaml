@@ -1,0 +1,368 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Shared ALB with path-based routing for LEON AI assistant skill services (POC).
+  Routes /urgent-drafting, /story-drafting, /text-archive to NEW dedicated target groups
+  (IP type, port 8000) created by this stack. Does NOT interfere with the existing
+  CDK-managed per-skill ALBs or their target groups.
+  Creates a Route53 ALIAS record in the 8335.aws-int.thomsonreuters.com private hosted zone.
+  Account: tr-central-preprod (060725138335). Asset ID: 207920.
+
+  POST-DEPLOYMENT ACTION REQUIRED:
+  Add an inbound rule for port 8000 from the SharedAlbSecurityGroup (output: SharedAlbSecurityGroupId)
+  to the security group of EACH of the three ECS skill services:
+    urgent-drafting:  sg-0b354bf35542d6b6b
+    story-drafting:   sg-072813dff268faa2e
+    text-archive:     sg-02de53ea1ec2d0aaf
+  Without this, health checks fail and no traffic reaches the containers.
+
+Parameters:
+
+  # --- Network ---
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID for the shared ALB. tr-central-preprod VPC is vpc-51c3e835.
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: >
+      Private subnet IDs across at least two AZs for the internal ALB.
+      tr-central-preprod private subnets: subnet-9dace9c5 (eu-west-1a),
+      subnet-31447c55 (eu-west-1b), subnet-47714e31 (eu-west-1c).
+
+  # --- Environment / Tagging ---
+
+  EnvironmentName:
+    Type: String
+    Description: >
+      Deployment environment stage. Use 'ci' for development/integration, 'test' for QA.
+      Naming convention: a[assetid]-[assetshortname]-[env]-[subenv]-[region]-[service(_[subservice])]-[awsresource].
+    AllowedValues:
+      - ci
+      - test
+    Default: ci
+
+  ApplicationAssetInsightIdTag:
+    Type: String
+    Description: tr:application-asset-insight-id tag value.
+    Default: '207920'
+
+  ResourceOwnerTag:
+    Type: String
+    Description: tr:resource-owner tag value.
+    Default: iridium@trten.onmicrosoft.com
+
+  # Route53 private zone: 8335.aws-int.thomsonreuters.com (Z1GFVCPGDV59FR)
+  DnsHostname:
+    Type: String
+    Description: >-
+      DNS hostname prefix for the Route53 ALIAS record in the
+      8335.aws-int.thomsonreuters.com private hosted zone
+      (e.g. skills.leon-ci or skills.leon-test).
+
+Mappings:
+
+  EnvironmentTypeTag:
+    ci:
+      Name: DEVELOPMENT
+    test:
+      Name: QUALITY ASSURANCE
+
+Resources:
+
+  # ── Security Group ──────────────────────────────────────────────────────────
+  # NOTE: After deploying, add an inbound rule allowing port 8000 from this SG
+  # to the security group of each ECS skill service (urgent-drafting, story-drafting,
+  # text-archive). This permits health checks and traffic from the shared ALB.
+  SharedAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'LEON shared skills ALB SG - a207920 ${EnvironmentName}'
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 10.0.0.0/8
+          Description: HTTP from internal TR network (10.0.0.0/8)
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 10.0.0.0/8
+          Description: HTTP to ECS skill containers (port 8000) within TR network
+      Tags:
+        - Key: Name
+          Value: !Sub 'a207920-leo-${EnvironmentName}-main-euw1-skills-sg'
+        - Key: tr:application-asset-insight-id
+          Value: !Ref ApplicationAssetInsightIdTag
+        - Key: tr:resource-owner
+          Value: !Ref ResourceOwnerTag
+        - Key: tr:environment-type
+          Value: !FindInMap [EnvironmentTypeTag, !Ref EnvironmentName, Name]
+        - Key: tr:environment-name
+          Value: !Ref EnvironmentName
+        - Key: tr:project-name
+          Value: sphinx
+
+  # ── Application Load Balancer ───────────────────────────────────────────────
+  SharedAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internal
+      Subnets: !Ref SubnetIds
+      SecurityGroups:
+        - !Ref SharedAlbSecurityGroup
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '300'
+        - Key: deletion_protection.enabled
+          Value: 'false'
+      Tags:
+        - Key: Name
+          Value: !Sub 'a207920-leo-${EnvironmentName}-main-euw1-skills-alb'
+        - Key: tr:application-asset-insight-id
+          Value: !Ref ApplicationAssetInsightIdTag
+        - Key: tr:resource-owner
+          Value: !Ref ResourceOwnerTag
+        - Key: tr:environment-type
+          Value: !FindInMap [EnvironmentTypeTag, !Ref EnvironmentName, Name]
+        - Key: tr:environment-name
+          Value: !Ref EnvironmentName
+        - Key: tr:project-name
+          Value: sphinx
+        - Key: Service-Type
+          Value: Leon-Skill-SharedALB
+        - Key: Deployment-Method
+          Value: CloudFormation
+
+  # ── HTTP listener (default 404 for unmatched paths) ────────────────────────
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref SharedAlb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: '404'
+            ContentType: application/json
+            MessageBody: >-
+              {"error":"No skill route matched.",
+               "hint":"Valid path prefixes: /urgent-drafting, /story-drafting, /text-archive"}
+
+  # ── Dedicated target groups (POC-owned, IP type, port 8000) ──────────────
+  # These are NEW TGs created exclusively for this shared ALB POC.
+  # They do NOT interfere with the existing CDK-managed per-skill TGs.
+  # ECS tasks will register into these TGs once the ECS services are updated
+  # to add the shared ALB (CDK update, separate step).
+
+  UrgentDraftingTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    # Rule: Name property OMITTED — immutable resource, auto-generated by AWS.
+    # Use Name TAG only, following convention: a[assetid]-[assetshortname]-[env]-[subenv]-[region]-[service_subservice]-[awsresource]
+    Properties:
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: 8000
+      TargetType: ip
+      HealthCheckEnabled: true
+      HealthCheckPath: /health
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub 'a207920-leo-${EnvironmentName}-main-euw1-skill_urgdraft-tg'
+        - Key: tr:application-asset-insight-id
+          Value: !Ref ApplicationAssetInsightIdTag
+        - Key: tr:resource-owner
+          Value: !Ref ResourceOwnerTag
+        - Key: tr:environment-type
+          Value: !FindInMap [EnvironmentTypeTag, !Ref EnvironmentName, Name]
+        - Key: tr:environment-name
+          Value: !Ref EnvironmentName
+        - Key: tr:project-name
+          Value: sphinx
+
+  StoryDraftingTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    # Rule: Name property OMITTED — immutable resource, auto-generated by AWS.
+    Properties:
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: 8000
+      TargetType: ip
+      HealthCheckEnabled: true
+      HealthCheckPath: /health
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub 'a207920-leo-${EnvironmentName}-main-euw1-skill_storydraft-tg'
+        - Key: tr:application-asset-insight-id
+          Value: !Ref ApplicationAssetInsightIdTag
+        - Key: tr:resource-owner
+          Value: !Ref ResourceOwnerTag
+        - Key: tr:environment-type
+          Value: !FindInMap [EnvironmentTypeTag, !Ref EnvironmentName, Name]
+        - Key: tr:environment-name
+          Value: !Ref EnvironmentName
+        - Key: tr:project-name
+          Value: sphinx
+
+  TextArchiveTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    # Rule: Name property OMITTED — immutable resource, auto-generated by AWS.
+    Properties:
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: 8000
+      TargetType: ip
+      HealthCheckEnabled: true
+      HealthCheckPath: /health
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub 'a207920-leo-${EnvironmentName}-main-euw1-skill_textarch-tg'
+        - Key: tr:application-asset-insight-id
+          Value: !Ref ApplicationAssetInsightIdTag
+        - Key: tr:resource-owner
+          Value: !Ref ResourceOwnerTag
+        - Key: tr:environment-type
+          Value: !FindInMap [EnvironmentTypeTag, !Ref EnvironmentName, Name]
+        - Key: tr:environment-name
+          Value: !Ref EnvironmentName
+        - Key: tr:project-name
+          Value: sphinx
+
+  # ── Path-based listener rules ─────────────────────────────────────────────
+
+  UrgentDraftingListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpListener
+      Priority: 100
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /urgent-drafting
+              - /urgent-drafting/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref UrgentDraftingTargetGroup
+
+  StoryDraftingListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpListener
+      Priority: 110
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /story-drafting
+              - /story-drafting/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref StoryDraftingTargetGroup
+
+  TextArchiveListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HttpListener
+      Priority: 120
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /text-archive
+              - /text-archive/*
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref TextArchiveTargetGroup
+
+  # ── Route53 ALIAS record ───────────────────────────────────────────────────
+  # Private hosted zone: 8335.aws-int.thomsonreuters.com (Z1GFVCPGDV59FR)
+  # DnsHostname parameter drives the record name per environment.
+  SkillsDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z1GFVCPGDV59FR
+      Name: !Sub '${DnsHostname}.8335.aws-int.thomsonreuters.com.'
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt SharedAlb.DNSName
+        HostedZoneId: !GetAtt SharedAlb.CanonicalHostedZoneID
+        EvaluateTargetHealth: false
+
+Outputs:
+
+  SharedAlbArn:
+    Description: ARN of the LEON shared skills ALB.
+    Value: !Ref SharedAlb
+    Export:
+      Name: !Sub '${AWS::StackName}-alb-arn'
+
+  SharedAlbDnsName:
+    Description: Internal DNS name of the LEON shared skills ALB (AWS-generated).
+    Value: !GetAtt SharedAlb.DNSName
+    Export:
+      Name: !Sub '${AWS::StackName}-alb-dns'
+
+  SharedAlbCanonicalHostedZoneId:
+    Description: Canonical hosted zone ID needed for any additional Route53 ALIAS records.
+    Value: !GetAtt SharedAlb.CanonicalHostedZoneID
+    Export:
+      Name: !Sub '${AWS::StackName}-alb-hz-id'
+
+  SkillsEndpointUrl:
+    Description: >
+      Internal URL for the LEON skills shared ALB via Route53 private DNS.
+      Reachable from within the TR internal network / VPC.
+    Value: !Sub 'http://${DnsHostname}.8335.aws-int.thomsonreuters.com'
+    Export:
+      Name: !Sub '${AWS::StackName}-skills-url'
+
+  SharedAlbSecurityGroupId:
+    Description: >
+      SG ID of the shared ALB. REQUIRED POST-DEPLOYMENT ACTION: add an inbound rule
+      allowing port 8000 from this SG to the security group of each ECS skill service
+      (sg-0b354bf35542d6b6b, sg-072813dff268faa2e, sg-02de53ea1ec2d0aaf)
+      so ALB health checks and traffic can reach the containers.
+    Value: !Ref SharedAlbSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-sg-id'
+
+  UrgentDraftingTargetGroupArn:
+    Description: ARN of the POC dedicated urgent-drafting target group (shared ALB).
+    Value: !Ref UrgentDraftingTargetGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-tg-urgent'
+
+  StoryDraftingTargetGroupArn:
+    Description: ARN of the POC dedicated story-drafting target group (shared ALB).
+    Value: !Ref StoryDraftingTargetGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-tg-story'
+
+  TextArchiveTargetGroupArn:
+    Description: ARN of the POC dedicated text-archive target group (shared ALB).
+    Value: !Ref TextArchiveTargetGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-tg-text-archive'

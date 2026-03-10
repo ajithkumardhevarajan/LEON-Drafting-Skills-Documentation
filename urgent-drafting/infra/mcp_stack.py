@@ -8,6 +8,7 @@ from typing import Optional
 from aws_cdk import (
     Stack,
     Duration,
+    Fn,
     DefaultStackSynthesizer,
     aws_iam as iam,
     aws_ecs as ecs,
@@ -69,6 +70,9 @@ class MCPStack(Stack):
 
         # Create load-balanced Fargate service
         self.fargate_service = self._create_load_balanced_service()
+
+        # Attach to shared ALB target group (POC: ci/test only)
+        self._attach_shared_alb_tg()
 
         # Setup auto-scaling
         self._setup_auto_scaling()
@@ -264,6 +268,27 @@ class MCPStack(Stack):
         )
 
         return fargate_service
+
+    def _attach_shared_alb_tg(self) -> None:
+        """Attach ECS service to the shared ALB TG (POC: ci/test only)."""
+        if not self.config.shared_alb_tg_cf_export:
+            return
+        cfn_service = self.fargate_service.service.node.default_child
+        cfn_service.add_property_override(
+            "LoadBalancers",
+            [
+                {   # Existing per-skill ALB TG (CDK-managed)
+                    "ContainerName": f"{self.config.service_name}-container",
+                    "ContainerPort": self.config.container_port,
+                    "TargetGroupArn": self.fargate_service.target_group.target_group_arn,
+                },
+                {   # Shared ALB TG (CF stack-owned, POC)
+                    "ContainerName": f"{self.config.service_name}-container",
+                    "ContainerPort": self.config.container_port,
+                    "TargetGroupArn": Fn.import_value(self.config.shared_alb_tg_cf_export),
+                },
+            ],
+        )
 
     def _setup_auto_scaling(self):
         """Configure auto-scaling for the ECS service"""
