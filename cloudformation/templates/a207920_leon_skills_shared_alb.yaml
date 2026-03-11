@@ -179,9 +179,7 @@ Resources:
           FixedResponseConfig:
             StatusCode: '404'
             ContentType: application/json
-            MessageBody: >-
-              {"error":"No skill route matched.",
-               "hint":"Valid path prefixes: /urgent-drafting, /story-drafting, /text-archive"}
+            MessageBody: '{"error":"Not found"}'
 
   # ── Dedicated target groups (POC-owned, IP type, port 8000) ──────────────
   # These are NEW TGs created exclusively for this shared ALB POC.
