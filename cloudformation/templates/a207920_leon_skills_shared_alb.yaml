@@ -60,6 +60,14 @@ Parameters:
       8335.aws-int.thomsonreuters.com private hosted zone
       (e.g. skills.leon-ci or skills.leon-test).
 
+  CertificateArn:
+    Type: String
+    Description: >-
+      ARN of the ACM certificate to attach to the HTTPS listener.
+      Uses the Reuters AI Assistant multi-SAN cert (api.assistant.thomsonreuters.com)
+      which includes all skills.leon-* SANs.
+      tr-central-preprod: arn:aws:acm:eu-west-1:060725138335:certificate/5fe01d69-e0ed-4223-bbeb-b1072d0ed938
+
 Mappings:
 
   EnvironmentTypeTag:
@@ -85,6 +93,11 @@ Resources:
           ToPort: 80
           CidrIp: 10.0.0.0/8
           Description: HTTP from internal TR network (10.0.0.0/8)
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/8
+          Description: HTTPS from internal TR network (10.0.0.0/8)
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 8000
@@ -137,13 +150,30 @@ Resources:
         - Key: Deployment-Method
           Value: CloudFormation
 
-  # ── HTTP listener (default 404 for unmatched paths) ────────────────────────
+  # ── HTTP listener (redirects to HTTPS) ───────────────────────────────────
   HttpListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       LoadBalancerArn: !Ref SharedAlb
       Port: 80
       Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: '443'
+            StatusCode: HTTP_301
+
+  # ── HTTPS listener (default 404 for unmatched paths) ──────────────────────
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref SharedAlb
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
       DefaultActions:
         - Type: fixed-response
           FixedResponseConfig:
@@ -255,7 +285,7 @@ Resources:
   UrgentDraftingListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
-      ListenerArn: !Ref HttpListener
+      ListenerArn: !Ref HttpsListener
       Priority: 100
       Conditions:
         - Field: path-pattern
@@ -276,7 +306,7 @@ Resources:
   StoryDraftingListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
-      ListenerArn: !Ref HttpListener
+      ListenerArn: !Ref HttpsListener
       Priority: 110
       Conditions:
         - Field: path-pattern
@@ -297,7 +327,7 @@ Resources:
   TextArchiveListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
-      ListenerArn: !Ref HttpListener
+      ListenerArn: !Ref HttpsListener
       Priority: 120
       Conditions:
         - Field: path-pattern
@@ -353,7 +383,7 @@ Outputs:
     Description: >
       Internal URL for the LEON skills shared ALB via Route53 private DNS.
       Reachable from within the TR internal network / VPC.
-    Value: !Sub 'http://${DnsHostname}.8335.aws-int.thomsonreuters.com'
+    Value: !Sub 'https://${DnsHostname}.8335.aws-int.thomsonreuters.com'
     Export:
       Name: !Sub '${AWS::StackName}-skills-url'
 

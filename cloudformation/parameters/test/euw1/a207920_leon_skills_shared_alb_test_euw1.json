@@ -22,5 +22,9 @@
   {
     "ParameterKey": "DnsHostname",
     "ParameterValue": "skills.leon-test"
+  },
+  {
+    "ParameterKey": "CertificateArn",
+    "ParameterValue": "arn:aws:acm:eu-west-1:060725138335:certificate/5fe01d69-e0ed-4223-bbeb-b1072d0ed938"
   }
 ]
