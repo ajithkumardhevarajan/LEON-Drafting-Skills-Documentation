@@ -94,7 +94,7 @@ ENVIRONMENT_CONFIGS = {
         "cpu_target_utilization": 70,
         "memory_target_utilization": 70,
         "public_load_balancer": False,
-        "secrets_arn": "arn:aws:secretsmanager:eu-west-1:304853478528:secret:a207920-leon-skills-dxbeCU",
+        "secrets_arn": "arn:aws:secretsmanager:eu-west-1:304853478528:secret:a207920-leon-skills-prod-dia2c6",
         "ecr_repository_name": "a207920/text-archive-skill/prod",
     },
     "prod-use1": {
@@ -109,7 +109,7 @@ ENVIRONMENT_CONFIGS = {
         "cpu_target_utilization": 70,
         "memory_target_utilization": 70,
         "public_load_balancer": False,
-        "secrets_arn": "arn:aws:secretsmanager:us-east-1:304853478528:secret:a207920-leon-skills-dxbeCU",
+        "secrets_arn": "arn:aws:secretsmanager:us-east-1:304853478528:secret:a207920-leon-skills-prod-dia2c6",
         "ecr_repository_name": "a207920/text-archive-skill/prod",
     },
 }

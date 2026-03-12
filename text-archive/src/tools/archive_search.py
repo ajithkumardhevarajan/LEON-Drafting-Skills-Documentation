@@ -27,7 +27,21 @@ class ArchiveSearchConfig:
     # OAuth credentials
     CLIENT_ID = os.getenv("REUTERS_ARCHIVE_CLIENT_ID", "")
     CLIENT_SECRET = os.getenv("REUTERS_ARCHIVE_CLIENT_SECRET", "")
-    AUDIENCE = "4488c953-2cc1-445e-97e8-22fdc9388b5d"
+
+    # Audience per environment group.
+    # DEPLOYMENT_ENV is set at container startup (see infra/config.py).
+    _NONPROD_AUDIENCE = "4488c953-2cc1-445e-97e8-22fdc9388b5d"
+    _UAT_AUDIENCE     = "726d4c8d-761b-4770-94c9-9bdf99353951"
+    _PROD_AUDIENCE    = ""  # TBD
+
+    _AUDIENCES = {
+        "dev":      _NONPROD_AUDIENCE,
+        "qa":       _NONPROD_AUDIENCE,
+        "uat":      _UAT_AUDIENCE,
+        "prod":      _PROD_AUDIENCE,
+        "prod-euw1": _PROD_AUDIENCE,
+        "prod-use1": _PROD_AUDIENCE,
+    }
 
     # Endpoint configuration per environment group.
     # DEPLOYMENT_ENV is set at container startup (see infra/config.py).
@@ -50,6 +64,7 @@ class ArchiveSearchConfig:
 
     AUTH_URL: str = _auth_url
     API_BASE_URL: str = _api_base_url
+    AUDIENCE: str = _AUDIENCES.get(_env, _NONPROD_AUDIENCE)
 
     # Polling configuration (3 minutes = 36 attempts * 5 seconds)
     MAX_RETRIES = 36
