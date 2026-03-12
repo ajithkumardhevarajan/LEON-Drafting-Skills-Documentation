@@ -29,9 +29,27 @@ class ArchiveSearchConfig:
     CLIENT_SECRET = os.getenv("REUTERS_ARCHIVE_CLIENT_SECRET", "")
     AUDIENCE = "4488c953-2cc1-445e-97e8-22fdc9388b5d"
 
-    # API endpoints
-    AUTH_URL = "https://auth-nonprod.thomsonreuters.com/oauth/token"
-    API_BASE_URL = "https://archiveqa.us.dev.85556.aws-int.thomsonreuters.com/v1"
+    # Endpoint configuration per environment group.
+    # DEPLOYMENT_ENV is set at container startup (see infra/config.py).
+    _NONPROD_ENDPOINTS = ("https://auth-nonprod.thomsonreuters.com/oauth/token", "https://archiveqa.us.dev.85556.aws-int.thomsonreuters.com/v1")
+    _UAT_ENDPOINTS     = ("https://auth.thomsonreuters.com/oauth/token", "https://archiveqa.stg.23214.aws-int.thomsonreuters.com/v1")
+    _PROD_ENDPOINTS    = ("https://auth.thomsonreuters.com/oauth/token", "")  # API base URL TBD
+
+    _ENDPOINTS = {
+        "dev":      _NONPROD_ENDPOINTS,
+        "qa":       _NONPROD_ENDPOINTS,
+        "uat":      _UAT_ENDPOINTS,
+        # prod-euw1 and prod-use1 are regional deployments sharing the same endpoints
+        "prod":      _PROD_ENDPOINTS,
+        "prod-euw1": _PROD_ENDPOINTS,
+        "prod-use1": _PROD_ENDPOINTS,
+    }
+
+    _env = os.getenv("DEPLOYMENT_ENV", "dev")
+    _auth_url, _api_base_url = _ENDPOINTS.get(_env, _ENDPOINTS["dev"])
+
+    AUTH_URL: str = _auth_url
+    API_BASE_URL: str = _api_base_url
 
     # Polling configuration (3 minutes = 36 attempts * 5 seconds)
     MAX_RETRIES = 36
@@ -40,12 +58,13 @@ class ArchiveSearchConfig:
 
     @classmethod
     def is_configured(cls) -> bool:
-        """Check if the configuration has valid credentials"""
+        """Check if the configuration has valid credentials and endpoints"""
         return (
             cls.CLIENT_ID != "your_client_id_here" and
             cls.CLIENT_SECRET != "your_client_secret_here" and
             isinstance(cls.CLIENT_ID, str) and cls.CLIENT_ID.strip() != "" and
-            isinstance(cls.CLIENT_SECRET, str) and cls.CLIENT_SECRET.strip() != ""
+            isinstance(cls.CLIENT_SECRET, str) and cls.CLIENT_SECRET.strip() != "" and
+            isinstance(cls.API_BASE_URL, str) and cls.API_BASE_URL.strip() != ""
         )
 
 
@@ -263,11 +282,18 @@ class ArchiveSearchTool(BaseTool):
 
         # Validate configuration
         if not ArchiveSearchConfig.is_configured():
+            if not ArchiveSearchConfig.API_BASE_URL.strip():
+                msg = (
+                    f"Error: Reuters Text Archive API base URL is not configured for environment "
+                    f"'{ArchiveSearchConfig._env}'. The prod endpoint has not been set yet."
+                )
+            else:
+                msg = (
+                    "Error: Reuters Text Archive API credentials are not configured. "
+                    "Please set REUTERS_ARCHIVE_CLIENT_ID and REUTERS_ARCHIVE_CLIENT_SECRET environment variables."
+                )
             return ToolResult(
-                content=[{
-                    "type": "text",
-                    "text": "Error: Reuters Text Archive API credentials are not configured. Please set REUTERS_ARCHIVE_CLIENT_ID and REUTERS_ARCHIVE_CLIENT_SECRET environment variables."
-                }],
+                content=[{"type": "text", "text": msg}],
                 isError=True
             )
 

@@ -251,6 +251,7 @@ class MCPConfig:
             "MCP_SERVICE_NAME": self.service_name,
             "AWS_DEFAULT_REGION": self.aws_region,
             "MCP_PORT": str(self.container_port),
+            "DEPLOYMENT_ENV": self.environment,
         }
 
         # Try to load additional variables from .env file
