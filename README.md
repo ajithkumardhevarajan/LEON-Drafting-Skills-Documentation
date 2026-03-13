@@ -3,14 +3,14 @@
 > Interactive documentation for Reuters AI Assistant skills, workflows, and capabilities
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![GitHub Pages](https://img.shields.io/badge/docs-live-brightgreen)](https://ajithkumardhevarajan.github.io/reuters-ai-assistant-skills/)
+[![GitHub Pages](https://img.shields.io/badge/docs-live-brightgreen)](https://ajithkumardhevarajan.github.io/LEON-Drafting-Skills-Documentation/)
 [![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red.svg)](https://github.com/ajithkumardhevarajan/reuters-ai-assistant-skills)
 
 ## 📖 Overview
 
 A comprehensive, interactive reference guide documenting all Reuters AI Assistant skills, including detailed workflows, capabilities matrices, and AI model usage. This documentation provides transparency into how each skill processes requests, from user input through backend orchestration to final output.
 
-**🌐 [View Live Documentation](https://ajithkumardhevarajan.github.io/reuters-ai-assistant-skills/)**
+**🌐 [View Live Documentation](https://ajithkumardhevarajan.github.io/LEON-Drafting-Skills-Documentation/)**
 
 ## ✨ Features
 
@@ -46,7 +46,7 @@ A comprehensive, interactive reference guide documenting all Reuters AI Assistan
 ## 🚀 Quick Start
 
 ### View Online
-Simply visit the [live documentation](https://ajithkumardhevarajan.github.io/reuters-ai-assistant-skills/)
+Simply visit the [live documentation](https://ajithkumardhevarajan.github.io/LEON-Drafting-Skills-Documentation/)
 
 ### Run Locally
 ```bash
@@ -149,7 +149,7 @@ Semantic search integration across Reuters Text Archive.
 | Auto Slugging | Backlog | Backlog | Backlog |
 | Style Guide Compliance | ✓ | ✓ | ✓ |
 
-*Full matrix available in [live documentation](https://ajithkumardhevarajan.github.io/reuters-ai-assistant-skills/)*
+*Full matrix available in [live documentation](https://ajithkumardhevarajan.github.io/LEON-Drafting-Skills-Documentation/)*
 
 ## 🤝 Contributing
 
