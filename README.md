@@ -2,9 +2,8 @@
 
 > Interactive documentation for Reuters AI Assistant skills, workflows, and capabilities
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub Pages](https://img.shields.io/badge/docs-live-brightgreen)](https://ajithkumardhevarajan.github.io/LEON-Drafting-Skills-Documentation/)
-[![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red.svg)](https://github.com/ajithkumardhevarajan/reuters-ai-assistant-skills)
+[![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red.svg)](https://github.com/ajithkumardhevarajan/LEON-Drafting-Skills-Documentation)
 
 ## 📖 Overview
 
@@ -70,8 +69,7 @@ reuters-ai-assistant-skills/
 │   ├── index.html                # Main interactive documentation
 │   └── README.md                 # Documentation guide
 ├── README.md                     # This file
-├── CONTRIBUTING.md               # Contribution guidelines
-└── LICENSE                       # MIT License
+└── CONTRIBUTING.md               # Contribution guidelines
 ```
 
 ## 🎯 Skills Covered
@@ -165,10 +163,6 @@ Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTIN
 6. Push to your branch (`git push origin feature/amazing-feature`)
 7. Open a Pull Request
 
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## 👤 Author
 
 **Ajithkumar Dhevarajan**
@@ -199,6 +193,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
   <sub>Built with ❤️ for the Reuters newsroom</sub>
-  <br>
-  <sub>© 2026 Ajithkumar Dhevarajan. All rights reserved.</sub>
 </div>
