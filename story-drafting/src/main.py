@@ -18,8 +18,9 @@ from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 import uvicorn
+from pathlib import Path
 
 from .models import (
     HealthResponse,
@@ -151,6 +152,16 @@ class StoryDraftingMCPServer:
             return JSONResponse(
                 content={"status": "ready", "initialized": self.initialized}
             )
+
+        @self.app.get("/skills")
+        async def skills_documentation() -> FileResponse:
+            """
+            Skills documentation endpoint.
+
+            Returns the interactive skills and capabilities reference guide.
+            """
+            static_path = Path(__file__).parent.parent / "static" / "skills.html"
+            return FileResponse(static_path, media_type="text/html")
 
     async def _handle_initialize(
         self, request_id: Optional[str], params: Dict[str, Any]
