@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reuters AI Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e4e4e7;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 1.5rem 2rem 1rem;
+            border-bottom: 1px solid #27272a;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #fff;
+            letter-spacing: -0.02em;
+        }
+
+        .header p {
+            font-size: 0.875rem;
+            color: #71717a;
+            margin-top: 0.25rem;
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 200px;
+            border-right: 1px solid #27272a;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .nav-item {
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            color: #a1a1aa;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
+        }
+
+        .nav-item:hover {
+            background: #18181b;
+            color: #e4e4e7;
+        }
+
+        .nav-item.active {
+            background: #18181b;
+            color: #fff;
+            border-color: #3f3f46;
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem 2rem;
+        }
+
+        .section {
+            display: none;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .card {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .card-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-content {
+            font-size: 0.8125rem;
+            line-height: 1.5;
+            color: #a1a1aa;
+        }
+
+        .card-content strong {
+            color: #e4e4e7;
+        }
+
+        .list {
+            list-style: none;
+            font-size: 0.8125rem;
+            line-height: 1.6;
+        }
+
+        .list li {
+            padding-left: 1rem;
+            position: relative;
+            margin-bottom: 0.25rem;
+        }
+
+        .list li:before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #52525b;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.125rem 0.5rem;
+            background: #27272a;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #a1a1aa;
+            margin-top: 0.5rem;
+        }
+
+        .highlight {
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+            border: 1px solid #4c1d95;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .highlight h3 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #e0e7ff;
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0a0a0a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Reuters AI Assistant</h1>
+        <p>Skills & Capabilities Reference</p>
+    </div>
+
+    <div class="main">
+        <div class="sidebar">
+            <div class="nav-item active" onclick="showSection('overview')">Overview</div>
+            <div class="nav-item" onclick="showSection('base')">Generic AI Assistant</div>
+            <div class="nav-item" onclick="showSection('urgent')">Urgent</div>
+            <div class="nav-item" onclick="showSection('update')">Update</div>
+            <div class="nav-item" onclick="showSection('blank')">Blank Slate</div>
+            <div class="nav-item" onclick="showSection('archive')">Archive</div>
+            <div class="nav-item" onclick="showSection('capabilities')">Capabilities</div>
+            <div class="nav-item" onclick="showSection('models')">Models</div>
+        </div>
+
+        <div class="content">
+            <div id="overview" class="section active">
+                <div class="grid">
+                    <div class="card">
+                        <div class="card-title">🎯 Generic AI Assistant</div>
+                        <div class="card-content">
+                            <strong>Purpose:</strong> Orchestrates requests, routes to skills<br>
+                            <strong>Model:</strong> Gemini 2.5 Flash<br>
+                            <strong>Best For:</strong> Quick Q&A, content analysis, intelligent routing
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">⚡ Urgent</div>
+                        <div class="card-content">
+                            <strong>Purpose:</strong> Quick breaking news drafts<br>
+                            <strong>Model:</strong> GPT-4.1<br>
+                            <strong>Best For:</strong> Time-sensitive stories
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">🔄 Update</div>
+                        <div class="card-content">
+                            <strong>Purpose:</strong> Add new info to existing stories<br>
+                            <strong>Model:</strong> Gemini 2.5 Pro<br>
+                            <strong>Best For:</strong> Story development
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">✨ Blank Slate</div>
+                        <div class="card-content">
+                            <strong>Purpose:</strong> Create stories from research<br>
+                            <strong>Model:</strong> Gemini 2.5 Pro<br>
+                            <strong>Best For:</strong> Original reporting
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">🔍 Archive Search</div>
+                        <div class="card-content">
+                            <strong>Purpose:</strong> Semantic search on Reuters archive<br>
+                            <strong>Model:</strong> Skill-specific models<br>
+                            <strong>Best For:</strong> Research & context
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="highlight">
+                    <h3>Key Benefits</h3>
+                    <div class="two-col">
+                        <ul class="list">
+                            <li>Intelligent orchestration routing</li>
+                            <li>Optimized model per task</li>
+                            <li>Speed vs. depth balance</li>
+                        </ul>
+                        <ul class="list">
+                            <li>Reliable performance</li>
+                            <li>Reuters style compliance</li>
+                            <li>Seamless multi-skill integration</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div id="base" class="section">
+                <div class="card">
+                    <div class="card-title">🎯 Generic AI Assistant Skill</div>
+                    <div class="card-content">
+                        <strong>Primary Function:</strong> Answer questions, summarize content, extract information<br>
+                        <strong>Model:</strong> Gemini 2.5 Flash<br>
+                        <strong>Input:</strong> Story text, documents, or questions<br>
+                        <strong>Output:</strong> Summaries, quotes, answers, or insights
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">🔀 Orchestration Layer</div>
+                    <div class="card-content" style="line-height: 1.8;">
+                        The orchestration layer is the intelligent routing system that processes all user requests:<br><br>
+
+                        <strong>1. Request Reception</strong><br>
+                        User input received through LEON AI Assistant interface<br><br>
+
+                        <strong>2. Intent Interpretation</strong><br>
+                        • Orchestrator uses Intent Interpreter Prompt to analyze user request<br>
+                        • Determines user intent and required action type<br>
+                        • Classifies request as: Question, Summarization, Extraction, or Skill-specific task<br><br>
+
+                        <strong>3. Routing Decision</strong><br>
+                        Orchestrator decides the best path:<br>
+                        • <strong>Generic Query</strong> → Routes to Generic AI Assistant (Gemini 2.5 Flash)<br>
+                        • <strong>Urgent Creation</strong> → Routes to Urgent skill (GPT-4.1)<br>
+                        • <strong>Story Update</strong> → Routes to Update skill (Gemini 2.5 Pro)<br>
+                        • <strong>New Story</strong> → Routes to Blank Slate skill (Gemini 2.5 Pro)<br><br>
+
+                        <strong>4. Tool Selection</strong><br>
+                        Orchestrator determines if additional tools are needed:<br>
+                        • Archive Search - Semantic search on Reuters Text Archive<br>
+                        • Live Market Data - Real-time market information (backlog)<br>
+                        • Document Access - User-uploaded PDFs or plain text<br>
+                        • Web Content - External sources (backlog)<br><br>
+
+                        <strong>5. Context Management</strong><br>
+                        • Maintains conversation history<br>
+                        • Tracks user preferences and custom instructions<br>
+                        • Preserves context across multiple interactions<br>
+                        • Manages session state and selected sources
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">Complete Workflow</div>
+                    <div class="card-content" style="line-height: 1.8;">
+                        <strong>Step 1: User Input</strong><br>
+                        User asks question, requests summary, or provides content for analysis<br><br>
+
+                        <strong>Step 2: Orchestration Processing</strong><br>
+                        • Orchestrator receives request via LEON interface<br>
+                        • Executes Intent Interpreter Prompt to classify intent<br>
+                        • Determines this is a generic query (not skill-specific)<br>
+                        • Selects Gemini 2.5 Flash for fast response<br>
+                        • Checks if archive search or other tools are needed<br><br>
+
+                        <strong>Step 3: Model Execution</strong><br>
+                        • System calls Gemini 2.5 Flash model (sub-second response)<br>
+                        • Model processes request using appropriate analysis technique:<br>
+                        &nbsp;&nbsp;- Summarization: Extracts key points and themes<br>
+                        &nbsp;&nbsp;- Quote Extraction: Identifies and attributes direct quotes<br>
+                        &nbsp;&nbsp;- Q&A: Searches content for specific information<br>
+                        &nbsp;&nbsp;- Analysis: Identifies patterns, themes, or insights<br><br>
+
+                        <strong>Step 4: Response</strong><br>
+                        • Orchestrator receives model output<br>
+                        • Formats response for user presentation<br>
+                        • AI provides answer, summary, or extracted information to user<br><br>
+
+                        <strong>Step 5: Follow-up (Optional)</strong><br>
+                        • User can ask follow-up questions<br>
+                        • Orchestrator maintains conversation context<br>
+                        • Chat-based interaction for refinement<br>
+                        • Quick iterations without regenerating full drafts
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">🔀 Orchestration Routing Examples</div>
+                    <div class="card-content" style="font-size: 0.8125rem; line-height: 1.7;">
+                        <strong>Example 1:</strong> "Summarize this earnings report"<br>
+                        → Orchestrator classifies as <em>Summarization</em><br>
+                        → Routes to Generic AI Assistant (Gemini 2.5 Flash)<br>
+                        → Returns summary in seconds<br><br>
+
+                        <strong>Example 2:</strong> "Create an urgent from these alerts"<br>
+                        → Orchestrator classifies as <em>Urgent Creation</em><br>
+                        → Routes to Urgent skill (GPT-4.1)<br>
+                        → Executes Body + Headline prompts<br><br>
+
+                        <strong>Example 3:</strong> "Update this story with new revenue figures"<br>
+                        → Orchestrator classifies as <em>Story Update</em><br>
+                        → Routes to Update skill (Gemini 2.5 Pro)<br>
+                        → Triggers archive search → Mode selection → Update generation<br><br>
+
+                        <strong>Example 4:</strong> "Write a story about Tesla earnings"<br>
+                        → Orchestrator classifies as <em>New Story Creation</em><br>
+                        → Routes to Blank Slate skill (Gemini 2.5 Pro)<br>
+                        → Triggers archive search → Source selection → Full story generation
+                    </div>
+                </div>
+
+                <div class="grid" style="margin-top: 1rem;">
+                    <div class="card">
+                        <div class="card-title">✓ What It Does</div>
+                        <ul class="list">
+                            <li>Summarizes stories and documents</li>
+                            <li>Extracts key quotes and attribution</li>
+                            <li>Answers questions about content</li>
+                            <li>Identifies main themes and topics</li>
+                            <li>Provides quick insights and analysis</li>
+                            <li>Assists with general research queries</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">🤖 Backend Components</div>
+                        <ul class="list">
+                            <li>Intent Interpreter Prompt - Classifies user intent</li>
+                            <li>Skill Router - Directs to appropriate skill</li>
+                            <li>Tool Selector - Determines needed resources</li>
+                            <li>Context Manager - Maintains conversation state</li>
+                            <li>Response Formatter - Presents output to user</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">📋 Best Practices</div>
+                    <ul class="list">
+                        <li>Ask clear, specific questions for better routing</li>
+                        <li>Provide relevant documents/stories as context</li>
+                        <li>Review extracted information for accuracy</li>
+                        <li>Verify facts and figures from sources</li>
+                        <li>Check quote accuracy and attribution context</li>
+                        <li>Use for quick research and exploratory queries</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div id="urgent" class="section">
+                <div class="card">
+                    <div class="card-title">⚡ Urgent Skill</div>
+                    <div class="card-content">
+                        <strong>Primary Function:</strong> Build 1-2 sentence urgent news stories from news flashes<br>
+                        <strong>Model:</strong> GPT-4.1<br>
+                        <strong>Input:</strong> News flashes (breaking news alerts in decreasing order of importance)<br>
+                        <strong>Output:</strong> 1-2 sentence urgent (max 80 words) + headline
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">Complete Workflow</div>
+                    <div class="card-content" style="line-height: 1.8;">
+                        <strong>Step 1: User Trigger</strong><br>
+                        User selects news alerts/flashes (ordered by importance)<br><br>
+
+                        <strong>Step 2: Backend Processing</strong><br>
+                        • System calls GPT-4.1 model<br>
+                        • Executes Body Generation Prompt (400+ lines of Reuters style rules)<br>
+                        • Model processes news flashes and generates 1-2 sentence urgent<br>
+                        • Based on the body, headline is generated<br>
+                        • Model creates headline (sentence case, under 65 characters)<br><br>
+
+                        <strong>Step 3: Review</strong><br>
+                        Urgent + Headline presented to user for review<br><br>
+
+                        <strong>Step 4: Refinement (Optional)</strong><br>
+                        • User can unselect or reorder alerts to regenerate<br>
+                        • User can request refinements (calls Refinement Prompt)<br>
+                        • System makes surgical edits based on feedback<br><br>
+
+                        <strong>Step 5: Insert</strong><br>
+                        User clicks "Insert Draft" button → Content inserted into LEON editor
+                    </div>
+                </div>
+
+                <div class="grid" style="margin-top: 1rem;">
+                    <div class="card">
+                        <div class="card-title">✓ Key Rules</div>
+                        <ul class="list">
+                            <li>First news flash MUST be in first sentence</li>
+                            <li>Use ONLY "said", "added", "showed", "according to"</li>
+                            <li>Never assume names, titles, or gender</li>
+                            <li>Use ##INSERT NAME## placeholder if unsure</li>
+                            <li>Include &lt;DOW_placeholder&gt; for day of week</li>
+                            <li>Maximum 80 words, 2 sentences</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">📋 Style Guidelines</div>
+                        <ul class="list">
+                            <li>Never use 'percent' - always use %</li>
+                            <li>Spell out months (August 25, not Aug. 25)</li>
+                            <li>$ before figures for USD only</li>
+                            <li>Spell out other currencies (500 euros)</li>
+                            <li>Never start sentences with numbers</li>
+                            <li>Formal tone, no speculation</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">🤖 Backend Prompts</div>
+                        <ul class="list">
+                            <li>Body Prompt - 400+ lines of Reuters rules</li>
+                            <li>Headline generation</li>
+                            <li>Refinement Prompt - Type A (explicit) & Type B (requests)</li>
+                            <li>All prompts enforce strict Reuters style</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">🔧 Refinement Options</div>
+                    <div class="card-content" style="font-size: 0.8125rem;">
+                        <strong>Type A - Explicit Instructions:</strong> User provides exact content<br>
+                        <em style="font-size: 0.75rem; color: #71717a;">Example: "Change headline to China sanctions European automakers"</em><br><br>
+                        <strong>Type B - General Requests:</strong> User asks for changes without content<br>
+                        <em style="font-size: 0.75rem; color: #71717a;">Example: "Add CEO's name" - only fulfilled if info exists in news flashes</em>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">Example</div>
+                    <div class="card-content" style="font-size: 0.75rem; line-height: 1.6;">
+                        <strong>News Flash:</strong> "COLOMBIA'S ECOPETROL IN TALKS WITH OCCIDENTAL TO BUY STAKE IN CROWNROCK"<br><br>
+                        <strong>Urgent Output:</strong> "Colombia's Ecopetrol is in talks with Occidental to buy a stake in CrownRock on &lt;DOW_placeholder&gt;."<br><br>
+                        <strong>Headline:</strong> "Colombia's Ecopetrol in talks with Occidental on CrownRock stake"
+                    </div>
+                </div>
+            </div>
+
+            <div id="update" class="section">
+                <div class="card">
+                    <div class="card-title">🔄 Update Story Skill</div>
+                    <div class="card-content">
+                        <strong>Purpose:</strong> Update existing Reuters stories with new information<br>
+                        <strong>Model:</strong> Gemini 2.5 Pro<br>
+                        <strong>Length Target:</strong> ~100 words new content (general guideline, not rigid)<br>
+                        <strong>Output:</strong> Updated story + 25-word advisory explaining changes
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">Entry Points</div>
+                    <ul class="list">
+                        <li>Click "Update" from story read-only screen</li>
+                        <li>Select "Update" from dropdown in search page</li>
+                        <li>Right-click "Update" from monitoring page</li>
+                        <li>Open story and trigger AI Assistant</li>
+                        <li>Select "Publish & Update" when publishing</li>
+                    </ul>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">Complete Workflow</div>
+                    <div class="card-content" style="line-height: 1.8;">
+                        <strong>Step 1: User Trigger</strong><br>
+                        User selects existing story and clicks "Update" from multiple entry points<br><br>
+
+                        <strong>Step 2: User Input Request</strong><br>
+                        • Prompt: "How would you like to proceed with the update? Feel free to add new info, rewrite the story or provide custom instructions..."<br>
+                        • User provides new information/content in input field<br>
+                        • User can upload documents (PDF, plain text)<br><br>
+
+                        <strong>Step 3: Archive Search (Automatic)</strong><br>
+                        • Based on original story + user input text, system performs semantic search on Reuters Text Archive<br>
+                        • Relevant archive stories automatically displayed to user<br>
+                        • User can select archive stories for additional context<br>
+                        • Options: <strong>Load more</strong> / <strong>Skip</strong> / <strong>Use Selected and Generate</strong> / <strong>Use Selected and Provide Info</strong><br><br>
+
+                        <strong>Step 4: Mode Selection</strong><br>
+                        System asks: Should selected stories and content be added as background or rewrite?<br>
+                        User chooses update mode:<br>
+                        • <strong>Add Background</strong> - Keep existing lede, add new info to body<br>
+                        • <strong>Rewrite</strong> - New lede, restructure with new info as primary driver<br><br>
+
+                        <strong>Step 5: Backend Processing</strong><br>
+                        • System calls Gemini 2.5 Pro model<br>
+                        • Executes Story Update Body Prompt with selected mode<br>
+                        • Model integrates new information with original story following Reuters style<br>
+                        • Generates 25-word Advisory listing paragraph changes<br>
+                        • Adds References linking paragraphs to source inputs<br><br>
+
+                        <strong>Step 6: Review</strong><br>
+                        AI-drafted update + Advisory + References presented to user<br><br>
+
+                        <strong>Step 7: Refinement (Optional)</strong><br>
+                        • User can chat with AI for refinements<br>
+                        • System calls Refinement Prompt for surgical edits<br>
+                        • Story Diff Comparison available (in progress)<br><br>
+
+                        <strong>Step 8: Insert</strong><br>
+                        User clicks "Insert Draft" → Updated story inserted into LEON editor
+                    </div>
+                </div>
+
+                <div class="grid" style="margin-top: 1rem;">
+                    <div class="card">
+                        <div class="card-title">🔧 Add Background Mode</div>
+                        <ul class="list">
+                            <li>Preserves existing lede (top paragraphs)</li>
+                            <li>Seamlessly integrates new info into body</li>
+                            <li>Surgically updates if new info overlaps top</li>
+                            <li>Avoids repeating facts from paragraphs 1-2</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">✨ Story Rewrite Mode</div>
+                        <ul class="list">
+                            <li>Treats new info as primary driver</li>
+                            <li>Writes new lede with fresh angle</li>
+                            <li>Preserves unique reporting from original</li>
+                            <li>Moves older material down, not deleted</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="grid" style="margin-top: 1rem;">
+                    <div class="card">
+                        <div class="card-title">Key Guidelines</div>
+                        <ul class="list">
+                            <li>Lede must be under 40 words</li>
+                            <li>Length guided by newsworthiness, not rigid word count</li>
+                            <li>Advisory max 25 words, lists paragraph numbers</li>
+                            <li>Maintains Reuters style throughout</li>
+                            <li>Can upload documents (PDF, plain text)</li>
+                            <li>Story Diff Comparison available (in progress)</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">🤖 Backend Prompts</div>
+                        <ul class="list">
+                            <li>Story Update Body Prompt - with mode selection</li>
+                            <li>Refinement Prompt - surgical edits only</li>
+                            <li>Advisory generation - 25-word summary</li>
+                            <li>References generation - source citations</li>
+                            <li>All prompts preserve journalistic integrity</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div id="blank" class="section">
+                <div class="card">
+                    <div class="card-title">✨ Blank Slate Skill (Spot Story)</div>
+                    <div class="card-content">
+                        <strong>Primary Function:</strong> Create complete news stories (~500 words) from provided sources<br>
+                        <strong>Model:</strong> Gemini 2.5 Pro<br>
+                        <strong>Input:</strong> New Content Sources + Background Sources from archive<br>
+                        <strong>Output:</strong> Headline + Bullet points + Complete structured story
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">Complete Workflow</div>
+                    <div class="card-content" style="line-height: 1.8;">
+                        <strong>Step 1: User Trigger</strong><br>
+                        User initiates Blank Slate skill with topic or context<br><br>
+
+                        <strong>Step 2: Archive Search (Automatic)</strong><br>
+                        • System performs semantic search on Reuters Text Archive<br>
+                        • Returns relevant stories categorized as:<br>
+                        &nbsp;&nbsp;- <strong>New Content Sources</strong> (for lead & main story)<br>
+                        &nbsp;&nbsp;- <strong>Background Sources</strong> (for context & history)<br>
+                        • User selects which sources to include (can select 15+ stories)<br><br>
+
+                        <strong>Step 3: User Input</strong><br>
+                        • User can provide additional context or instructions<br>
+                        • User can upload documents (PDF, plain text) for additional info<br><br>
+
+                        <strong>Step 4: Backend Processing - Article Planning</strong><br>
+                        • System calls Gemini 2.5 Pro model<br>
+                        • Model enters planning phase (wrapped in &lt;article_planning&gt; tags):<br>
+                        &nbsp;&nbsp;- Identifies primary story angle from New Content Sources<br>
+                        &nbsp;&nbsp;- Lists key facts driving lead and narrative<br>
+                        &nbsp;&nbsp;- Notes relevant background context<br>
+                        &nbsp;&nbsp;- Considers chronology using publication dates<br>
+                        &nbsp;&nbsp;- Brainstorms 2-3 potential headlines<br>
+                        &nbsp;&nbsp;- Outlines structure with word counts per section<br><br>
+
+                        <strong>Step 5: Story Generation</strong><br>
+                        • Executes Spot Story Body Prompt (500-word structured article)<br>
+                        • Generates story following structure:<br>
+                        &nbsp;&nbsp;- Lead (35 words max)<br>
+                        &nbsp;&nbsp;- Details (200-250 words)<br>
+                        &nbsp;&nbsp;- Nut Graph (50-70 words)<br>
+                        &nbsp;&nbsp;- Quotes (100-150 words, if available)<br>
+                        &nbsp;&nbsp;- Background (100-150 words)<br><br>
+
+                        <strong>Step 6: Headline & Bullets Generation</strong><br>
+                        • Based on the story, headline is generated (sentence case, 5-10 words)<br>
+                        • Based on the story, bullet points are generated (3 key points, max 15 words each)<br>
+                        • References are added with source citations per paragraph<br><br>
+
+                        <strong>Step 7: Review</strong><br>
+                        Complete story + Headline + Bullets + References presented to user<br><br>
+
+                        <strong>Step 8: Refinement (Optional)</strong><br>
+                        • User can request specific changes<br>
+                        • System calls Refinement Prompt for surgical edits<br>
+                        • User can regenerate with different sources<br><br>
+
+                        <strong>Step 9: Insert</strong><br>
+                        User clicks "Insert Draft" → Complete story inserted into LEON editor
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">Story Structure Output (~500 words)</div>
+                    <div class="card-content" style="font-size: 0.8125rem; line-height: 1.7;">
+                        <strong>Lead (35 words max):</strong> Most newsworthy development from New Content Sources<br>
+                        <strong>Details (200-250 words):</strong> Expand on lead, provide context across multiple paragraphs<br>
+                        <strong>Nut Graph (50-70 words):</strong> Why readers should care - significance, what's at stake<br>
+                        <strong>Quotes (100-150 words):</strong> Direct quotes from sources (only if available - never fabricated)<br>
+                        <strong>Background (100-150 words):</strong> Historical context from Background Sources, chronologically organized
+                    </div>
+                </div>
+
+                <div class="grid" style="margin-top: 1rem;">
+                    <div class="card">
+                        <div class="card-title">📝 Source Prioritization</div>
+                        <ul class="list">
+                            <li>New Content Sources → Lead & main story</li>
+                            <li>Background Sources → Context & history</li>
+                            <li>Prioritize by recency & newsworthiness</li>
+                            <li>Use publication dates for timeline</li>
+                            <li>Synthesize, don't just summarize</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">🤖 Backend Prompts</div>
+                        <ul class="list">
+                            <li>Body Prompt - 500-word structured article</li>
+                            <li>Headline generation</li>
+                            <li>Bullet points generation</li>
+                            <li>References generation</li>
+                            <li>Refinement Prompt - Surgical edits</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">Additional Outputs</div>
+                    <div class="card-content">
+                        <strong>Headline:</strong> 5-10 words, sentence case, under 65 characters<br>
+                        <strong>Bullet Points:</strong> 3 key points (max 15 words each, no periods)<br>
+                        <strong>References:</strong> Paragraph-level citation to source inputs<br><br>
+                        <em style="font-size: 0.75rem; color: #71717a;">Example bullets: "Probe partly relates to posts following Hamas attacks" / "Investigation is first under new Digital Services Act (DSA)"</em>
+                    </div>
+                </div>
+
+                <div class="highlight" style="margin-top: 1rem;">
+                    <h3>Why Gemini 2.5 Pro?</h3>
+                    <div class="card-content">
+                        Excels at processing large amounts of context (15+ archive stories) and synthesizing them into coherent, well-structured narratives. Superior multi-document understanding and long-form content generation.
+                    </div>
+                </div>
+            </div>
+
+            <div id="archive" class="section">
+                <div class="card">
+                    <div class="card-title">🔍 Archive Search</div>
+                    <div class="card-content">
+                        <strong>Technology:</strong> Semantic search on Reuters Text Archive<br>
+                        <strong>Integration:</strong> Works with all skills (triggered by orchestration layer)<br>
+                        <strong>Capability:</strong> Context-aware query generation
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">🔀 Orchestration Integration</div>
+                    <div class="card-content" style="line-height: 1.8;">
+                        The orchestration layer intelligently determines when archive search is needed:<br><br>
+
+                        <strong>Automatic Triggers:</strong><br>
+                        • <strong>Update skill</strong> - Automatically searches for related stories when updating<br>
+                        • <strong>Blank Slate skill</strong> - Searches for New Content + Background Sources<br>
+                        • <strong>Generic queries</strong> - Triggered when user asks about past events or context<br><br>
+
+                        <strong>Decision Logic:</strong><br>
+                        Orchestrator analyzes user intent and determines if archive context would enhance the response. If yes, archive search is triggered before skill execution.
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">Complete Search Process</div>
+                    <div class="card-content" style="line-height: 1.8;">
+                        <strong>1. Orchestration Decision:</strong> Orchestrator determines archive search is needed<br><br>
+
+                        <strong>2. Query Generation:</strong><br>
+                        • Skill's respective AI model analyzes the request<br>
+                        • Generates targeted semantic search queries<br>
+                        • Creates multiple query variations for comprehensive results<br><br>
+
+                        <strong>3. Archive Retrieval:</strong><br>
+                        • Semantic search executed on Reuters Text Archive<br>
+                        • Returns ranked results based on relevance<br>
+                        • Categorizes as New Content or Background Sources (Blank Slate)<br><br>
+
+                        <strong>4. User Selection:</strong><br>
+                        • Relevant stories presented to user<br>
+                        • User can select which stories to include<br>
+                        • Options: Load more, Skip, Use Selected<br><br>
+
+                        <strong>5. Synthesis:</strong><br>
+                        • Selected stories passed to AI model<br>
+                        • Model synthesizes archive content with new information<br>
+                        • Generates output following skill-specific structure
+                    </div>
+                </div>
+
+                <div class="grid" style="margin-top: 1rem;">
+                    <div class="card">
+                        <div class="card-title">✓ Capabilities</div>
+                        <ul class="list">
+                            <li>Semantic understanding of queries</li>
+                            <li>Context-aware search</li>
+                            <li>Multi-query generation</li>
+                            <li>Relevance ranking</li>
+                            <li>Historical context retrieval</li>
+                            <li>Source categorization</li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">📚 Use Cases</div>
+                        <ul class="list">
+                            <li>Background research for updates</li>
+                            <li>Historical context for new stories</li>
+                            <li>Finding related coverage</li>
+                            <li>Fact verification against past reporting</li>
+                            <li>Trend analysis across time</li>
+                            <li>Building story timelines</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div id="capabilities" class="section">
+                <div class="card">
+                    <div class="card-title">Feature Comparison Matrix</div>
+                    <div class="card-content">
+                        Comprehensive overview of AI Assistant and LEON integration capabilities across all skills
+                    </div>
+                </div>
+
+                <div style="overflow-x: auto; margin-top: 1rem;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #27272a;">
+                                <th style="text-align: left; padding: 0.75rem; color: #e4e4e7; font-weight: 600;">Capability</th>
+                                <th style="text-align: center; padding: 0.75rem; color: #e4e4e7; font-weight: 600;">Urgent</th>
+                                <th style="text-align: center; padding: 0.75rem; color: #e4e4e7; font-weight: 600;">Update</th>
+                                <th style="text-align: center; padding: 0.75rem; color: #e4e4e7; font-weight: 600;">Blank Slate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="background: #18181b;">
+                                <td colspan="4" style="padding: 0.5rem 0.75rem; color: #a1a1aa; font-weight: 600; font-size: 0.75rem;">AI ASSISTANT CAPABILITIES</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">User Intent Input</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Source Citation/Reference</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Alert Selection</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #71717a;">—</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #71717a;">—</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Archive Story Selection</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #71717a;">—</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Live Market Data Call</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #71717a;">—</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Access to Imported Documents (Manual)</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #71717a;">—</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Access to Web Content (Manual)</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #71717a;">—</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Access to Automated Content (PRN, WW)</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Personal/Bespoke AI Skills</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Story Diff Comparison</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #71717a;">—</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #3b82f6;">In Progress</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #71717a;">—</td>
+                            </tr>
+                            <tr style="background: #18181b;">
+                                <td colspan="4" style="padding: 0.5rem 0.75rem; color: #a1a1aa; font-weight: 600; font-size: 0.75rem;">LEON INTEGRATION CAPABILITIES</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Auto Coding</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Auto Slugging</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Auto Trashline</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #71717a;">—</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #71717a;">—</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Auto-Insert URL</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #71717a;">—</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Auto-Insert RIC</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #9333ea;">Backlog</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Style Guide Compliance</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                                <td style="text-align: center; padding: 0.75rem; color: #4ade80;">✓</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="grid" style="margin-top: 1rem;">
+                    <div class="card">
+                        <div class="card-title">Legend</div>
+                        <div class="card-content">
+                            <span style="color: #4ade80;">✓</span> Available<br>
+                            <span style="color: #3b82f6;">In Progress</span> Under Development<br>
+                            <span style="color: #fbbf24;">Sometimes</span> Conditional<br>
+                            <span style="color: #9333ea;">Backlog</span> Planned<br>
+                            <span style="color: #71717a;">—</span> Not Available
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">Key Insights</div>
+                        <ul class="list">
+                            <li>Update has Story Diff in progress</li>
+                            <li>All skills support Style Guide Compliance</li>
+                            <li>Many advanced features in backlog</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div id="models" class="section">
+                <div class="card">
+                    <div class="card-title">AI Models by Skill</div>
+                    <div class="card-content">
+                        Each skill uses a model optimized for its specific task requirements
+                    </div>
+                </div>
+
+                <div style="margin-top: 1rem;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #27272a;">
+                                <th style="text-align: left; padding: 0.75rem; color: #e4e4e7; font-weight: 600;">Skill</th>
+                                <th style="text-align: left; padding: 0.75rem; color: #e4e4e7; font-weight: 600;">Model</th>
+                                <th style="text-align: left; padding: 0.75rem; color: #e4e4e7; font-weight: 600;">Strength</th>
+                                <th style="text-align: left; padding: 0.75rem; color: #e4e4e7; font-weight: 600;">Best For</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #e4e4e7;">Generic AI Assistant</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Gemini 2.5 Flash</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Ultra-fast response</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Quick Q&A, summaries, quote extraction</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #e4e4e7;">Urgent</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">GPT-4.1</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Structured writing</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Breaking news, professional drafts</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #e4e4e7;">Update</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Gemini 2.5 Pro</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Deep synthesis</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Story updates, context integration</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #27272a;">
+                                <td style="padding: 0.75rem; color: #e4e4e7;">Blank Slate</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Gemini 2.5 Pro</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Deep synthesis</td>
+                                <td style="padding: 0.75rem; color: #a1a1aa;">Multi-source stories, research synthesis</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card" style="margin-top: 1rem;">
+                    <div class="card-title">⚠️ Best Practices</div>
+                    <ul class="list">
+                        <li>Always review AI-generated content</li>
+                        <li>Verify critical facts and figures</li>
+                        <li>Check quote attribution</li>
+                        <li>Apply editorial judgment</li>
+                        <li>Add original reporting when available</li>
+                        <li>Report quality issues to the team</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>
